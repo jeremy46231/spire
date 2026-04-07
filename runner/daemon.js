@@ -49,7 +49,7 @@ function startPaperServer() {
   log('[runner] Starting Paper server...')
   const proc = spawn(
     'java',
-    ['-Xms512M', '-Xmx1G', '-jar', SERVER_JAR, '--nogui'],
+    ['-Xms2G', '-Xmx2G', '-jar', SERVER_JAR, '--nogui'],
     {
       cwd: SERVER_DIR,
       stdio: ['pipe', 'pipe', 'pipe'],
