@@ -1,71 +1,112 @@
-<!DOCTYPE html>
-<html lang="en" style="height:100%;margin:0">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Spire</title>
-</head>
-<body style="height:100%;margin:0;display:flex;flex-direction:column;font-family:sans-serif">
-  <div id="status" style="padding:8px 12px;border-bottom:1px solid #ccc">Starting...</div>
-  <iframe id="viewer" src="/viewer/" style="flex:1;border:none;display:none"></iframe>
-  <div id="console-section" style="border-top:1px solid #ccc">
-    <button id="console-toggle" style="width:100%;padding:4px 12px;text-align:left;border:none;background:#222;color:#eee;cursor:pointer;font-size:12px">▼ Console</button>
-    <div id="console" style="overflow-y:auto;height:200px;font-family:monospace;font-size:12px;white-space:pre-wrap;background:#111;color:#eee;padding:8px"></div>
-  </div>
-  <script>
-    var statusEl = document.getElementById('status')
-    var viewerEl = document.getElementById('viewer')
-    var consoleEl = document.getElementById('console')
-    var toggleBtn = document.getElementById('console-toggle')
-    var consoleVisible = true
+<!doctype html>
+<html lang="en" style="height: 100%; margin: 0">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spire</title>
+  </head>
+  <body
+    style="
+      height: 100%;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      font-family: sans-serif;
+    "
+  >
+    <div id="status" style="padding: 8px 12px; border-bottom: 1px solid #ccc">
+      Starting...
+    </div>
+    <iframe
+      id="viewer"
+      src="/viewer/"
+      style="flex: 1; border: none; display: none"
+    ></iframe>
+    <div id="console-section" style="border-top: 1px solid #ccc">
+      <button
+        id="console-toggle"
+        style="
+          width: 100%;
+          padding: 4px 12px;
+          text-align: left;
+          border: none;
+          background: #222;
+          color: #eee;
+          cursor: pointer;
+          font-size: 12px;
+        "
+      >
+        ▼ Console
+      </button>
+      <div
+        id="console"
+        style="
+          overflow-y: auto;
+          height: 200px;
+          font-family: monospace;
+          font-size: 12px;
+          white-space: pre-wrap;
+          background: #111;
+          color: #eee;
+          padding: 8px;
+        "
+      ></div>
+    </div>
+    <script>
+      var statusEl = document.getElementById('status')
+      var viewerEl = document.getElementById('viewer')
+      var consoleEl = document.getElementById('console')
+      var toggleBtn = document.getElementById('console-toggle')
+      var consoleVisible = true
 
-    toggleBtn.addEventListener('click', function () {
-      consoleVisible = !consoleVisible
-      consoleEl.style.display = consoleVisible ? 'block' : 'none'
-      toggleBtn.textContent = (consoleVisible ? '▼' : '▶') + ' Console'
-    })
+      toggleBtn.addEventListener('click', function () {
+        consoleVisible = !consoleVisible
+        consoleEl.style.display = consoleVisible ? 'block' : 'none'
+        toggleBtn.textContent = (consoleVisible ? '▼' : '▶') + ' Console'
+      })
 
-    function appendLine(line) {
-      consoleEl.textContent += line + '\n'
-      consoleEl.scrollTop = consoleEl.scrollHeight
-    }
-
-    function updateStatus(s) {
-      var text = s.phase
-      if (s.phase === 'ready') {
-        text = 'Ready — ' + s.players + ' player' + (s.players !== 1 ? 's' : '')
-      } else if (s.phase === 'starting') {
-        text = 'Starting...'
-      } else if (s.phase === 'starting-server') {
-        text = 'Starting server...'
+      function appendLine(line) {
+        consoleEl.textContent += line + '\n'
+        consoleEl.scrollTop = consoleEl.scrollHeight
       }
-      statusEl.textContent = text
 
-      viewerEl.style.display = s.viewerReady ? 'block' : 'none'
-    }
+      function updateStatus(s) {
+        var text = s.phase
+        if (s.phase === 'ready') {
+          text =
+            'Ready — ' + s.players + ' player' + (s.players !== 1 ? 's' : '')
+        } else if (s.phase === 'starting') {
+          text = 'Starting...'
+        } else if (s.phase === 'starting-server') {
+          text = 'Starting server...'
+        }
+        statusEl.textContent = text
 
-    function connect() {
-      var proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-      var ws = new WebSocket(proto + '//' + location.host + '/ws')
+        viewerEl.style.display = s.viewerReady ? 'block' : 'none'
+      }
 
-      ws.onmessage = function (e) {
-        var msg = JSON.parse(e.data)
-        if (msg.type === 'backlog') {
-          consoleEl.textContent = ''
-          msg.lines.forEach(appendLine)
-        } else if (msg.type === 'status') {
-          updateStatus(msg)
-        } else if (msg.type === 'log') {
-          appendLine(msg.line)
+      function connect() {
+        var proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+        var ws = new WebSocket(proto + '//' + location.host + '/ws')
+
+        ws.onmessage = function (e) {
+          var msg = JSON.parse(e.data)
+          if (msg.type === 'backlog') {
+            consoleEl.textContent = ''
+            msg.lines.forEach(appendLine)
+          } else if (msg.type === 'status') {
+            updateStatus(msg)
+          } else if (msg.type === 'log') {
+            appendLine(msg.line)
+          }
+        }
+
+        ws.onclose = function () {
+          setTimeout(connect, 2000)
         }
       }
 
-      ws.onclose = function () {
-        setTimeout(connect, 2000)
-      }
-    }
-
-    connect()
-  </script>
-</body>
+      connect()
+    </script>
+  </body>
 </html>

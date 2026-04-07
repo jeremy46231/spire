@@ -72,7 +72,7 @@ if (await isDaemonRunning()) {
     console.error('[start] Failed to restart bots')
     process.exit(1)
   }
-  return
+  process.exit(0)
 }
 
 // Clean stale PID file
@@ -87,7 +87,7 @@ if (existsSync(PID_FILE)) {
       console.log('[start] Daemon recovered, restarting bots...')
       await fetch(`${API}/restart-bots`, { method: 'POST' })
       console.log('[start] Bots restarted')
-      return
+      process.exit(0)
     }
     // Still not responding, kill it
     console.log('[start] Killing unresponsive daemon...')

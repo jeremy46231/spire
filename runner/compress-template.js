@@ -12,11 +12,16 @@ if (!existsSync(TEMPLATE_DIR)) {
   process.exit(1)
 }
 
-console.log('[compress] Packing .spire/server-template/ -> .spire/server.tar.zst')
+console.log(
+  '[compress] Packing .spire/server-template/ -> .spire/server.tar.zst'
+)
 
 // pipe through zstd for cross-platform compat (macOS tar lacks --zstd)
-execSync(`tar --no-mac-metadata -cf - -C "${TEMPLATE_DIR}" . | zstd -o "${OUTPUT}"`, {
-  stdio: 'inherit',
-})
+execSync(
+  `tar --no-mac-metadata -cf - -C "${TEMPLATE_DIR}" . | zstd -o "${OUTPUT}"`,
+  {
+    stdio: 'inherit',
+  }
+)
 
 console.log('[compress] Done')

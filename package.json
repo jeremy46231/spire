@@ -4,12 +4,14 @@
     "start": "bun runner/start.js",
     "stop": "bun runner/stop.js",
     "console": "bun runner/console.js",
-    "setup": "bun runner/setup.js",
+    "setup": "bun runner/setup.js && bun node_modules/prismarine-viewer/viewer/prerender -f",
     "compress-template": "bun runner/compress-template.js"
   },
   "dependencies": {
     "canvas": "^3.2.3",
+    "fs-extra": "^11.3.4",
     "fzstd": "^0.1.1",
+    "minecraft-assets": "^1.17.0",
     "mineflayer": "^4.37.0",
     "prismarine-viewer": "^1.33.0",
     "rcon-client": "^4.2.5",

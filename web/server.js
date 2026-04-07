@@ -58,13 +58,21 @@ const server = Bun.serve({
     const url = new URL(req.url)
 
     // WebSocket upgrade for /ws (control channel)
-    if (url.pathname === '/ws' && req.headers.get('upgrade')?.toLowerCase() === 'websocket') {
+    if (
+      url.pathname === '/ws' &&
+      req.headers.get('upgrade')?.toLowerCase() === 'websocket'
+    ) {
       const ok = server.upgrade(req, { data: { type: 'control' } })
-      return ok ? undefined : new Response('WebSocket upgrade failed', { status: 500 })
+      return ok
+        ? undefined
+        : new Response('WebSocket upgrade failed', { status: 500 })
     }
 
     // WebSocket upgrade for /viewer/ (proxy to prismarine-viewer)
-    if (url.pathname.startsWith('/viewer/') && req.headers.get('upgrade')?.toLowerCase() === 'websocket') {
+    if (
+      url.pathname.startsWith('/viewer/') &&
+      req.headers.get('upgrade')?.toLowerCase() === 'websocket'
+    ) {
       const stripped = url.pathname.replace(/^\/viewer/, '') || '/'
       const ok = server.upgrade(req, {
         data: {
@@ -72,7 +80,9 @@ const server = Bun.serve({
           target: `ws://127.0.0.1:${VIEWER_PORT}${stripped}${url.search}`,
         },
       })
-      return ok ? undefined : new Response('WebSocket upgrade failed', { status: 500 })
+      return ok
+        ? undefined
+        : new Response('WebSocket upgrade failed', { status: 500 })
     }
 
     // API routes

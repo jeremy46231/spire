@@ -16,7 +16,7 @@ try {
   })
   if (res.ok) {
     console.log('[stop] Daemon stopping gracefully')
-    return
+    process.exit(0)
   }
 } catch {}
 
@@ -41,7 +41,7 @@ if (existsSync(PID_FILE)) {
   try {
     unlinkSync(PID_FILE)
   } catch {}
-  return
+  process.exit(0)
 }
 
 console.log('[stop] No daemon running')

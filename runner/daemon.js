@@ -53,7 +53,7 @@ function startPaperServer() {
     {
       cwd: SERVER_DIR,
       stdio: ['pipe', 'pipe', 'pipe'],
-    },
+    }
   )
 
   proc.stdout.on('data', (d) => {
@@ -104,9 +104,15 @@ function startPlayerCountPolling(rcon) {
   setInterval(async () => {
     try {
       const response = await rcon.send('list')
-      const match = response.match(/There are (\d+) of a max of (\d+) players online:(.*)/)
+      const match = response.match(
+        /There are (\d+) of a max of (\d+) players online:(.*)/
+      )
       if (match) {
-        const names = match[3].trim().split(',').map((n) => n.trim()).filter(Boolean)
+        const names = match[3]
+          .trim()
+          .split(',')
+          .map((n) => n.trim())
+          .filter(Boolean)
         const count = names.filter((n) => n !== 'SpireViewer').length
         setStatus({ players: count })
       }
@@ -127,7 +133,7 @@ async function startViewerBot(rcon) {
     version: '1.21.11',
     hideErrors: false,
   })
-  bot.physics = false
+  bot.physicsEnabled = false
   bot.setMaxListeners(50)
 
   await new Promise((resolve, reject) => {
@@ -202,8 +208,8 @@ function killAllBots() {
           setTimeout(() => {
             if (proc.exitCode === null) proc.kill('SIGKILL')
           }, 2000)
-        }),
-    ),
+        })
+    )
   )
 }
 
@@ -238,9 +244,9 @@ serverProc = startPaperServer()
 
 const rcon = await waitForRcon()
 
-await rcon.send('fill -10 60 -10 10 60 10 oak_planks')
-
 const viewerBot = await startViewerBot(rcon)
+await rcon.send('fill -10 60 -10 10 60 10 oak_planks') // temp because there isn't a world yet
+
 setStatus({ viewerReady: true })
 
 spawnAllBots()
