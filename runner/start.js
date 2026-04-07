@@ -18,6 +18,7 @@ const PID_FILE = resolve(ROOT, '.spire/daemon.pid')
 const LOG_FILE = resolve(ROOT, '.spire/daemon.log')
 const WEB_PORT = 3000
 const API = `http://127.0.0.1:${WEB_PORT}/api`
+const attachLogs = !process.argv.slice(2).includes('--detach')
 
 async function isDaemonRunning() {
   try {
@@ -61,63 +62,57 @@ function tailLog() {
   waitForFile()
 }
 
-async function main() {
-  if (await isDaemonRunning()) {
-    console.log('[start] Daemon already running, restarting bots...')
-    const res = await fetch(`${API}/restart-bots`, { method: 'POST' })
-    const data = await res.json()
-    if (data.ok) {
-      console.log('[start] Bots restarted')
-    } else {
-      console.error('[start] Failed to restart bots')
-      process.exit(1)
-    }
-    return
+if (await isDaemonRunning()) {
+  console.log('[start] Daemon already running, restarting bots...')
+  const res = await fetch(`${API}/restart-bots`, { method: 'POST' })
+  const data = await res.json()
+  if (data.ok) {
+    console.log('[start] Bots restarted')
+  } else {
+    console.error('[start] Failed to restart bots')
+    process.exit(1)
   }
-
-  // Clean stale PID file
-  if (existsSync(PID_FILE)) {
-    const pid = parseInt(readFileSync(PID_FILE, 'utf8'), 10)
-    try {
-      process.kill(pid, 0)
-      // Process exists but API didn't respond — wait and retry
-      console.log('[start] Daemon process exists but not responding, waiting...')
-      await new Promise((r) => setTimeout(r, 3000))
-      if (await isDaemonRunning()) {
-        console.log('[start] Daemon recovered, restarting bots...')
-        await fetch(`${API}/restart-bots`, { method: 'POST' })
-        console.log('[start] Bots restarted')
-        return
-      }
-      // Still not responding, kill it
-      console.log('[start] Killing unresponsive daemon...')
-      process.kill(pid, 'SIGKILL')
-      await new Promise((r) => setTimeout(r, 500))
-    } catch {
-      // Process doesn't exist, stale PID file
-    }
-  }
-
-  console.log('[start] Starting daemon...')
-  mkdirSync(resolve(ROOT, '.spire'), { recursive: true })
-
-  const logFd = openSync(LOG_FILE, 'w')
-  const child = spawn('bun', [DAEMON], {
-    cwd: ROOT,
-    detached: true,
-    stdio: ['ignore', logFd, logFd],
-  })
-  child.unref()
-
-  console.log(`[start] Daemon started (PID ${child.pid})`)
-  console.log(`[start] Viewer: http://localhost:${WEB_PORT}`)
-  console.log('[start] Tailing daemon log (Ctrl+C to detach)...')
-  console.log('')
-
-  tailLog()
+  return
 }
 
-main().catch((err) => {
-  console.error('[start] Fatal error:', err)
-  process.exit(1)
+// Clean stale PID file
+if (existsSync(PID_FILE)) {
+  const pid = parseInt(readFileSync(PID_FILE, 'utf8'), 10)
+  try {
+    process.kill(pid, 0)
+    // Process exists but API didn't respond — wait and retry
+    console.log('[start] Daemon process exists but not responding, waiting...')
+    await new Promise((r) => setTimeout(r, 3000))
+    if (await isDaemonRunning()) {
+      console.log('[start] Daemon recovered, restarting bots...')
+      await fetch(`${API}/restart-bots`, { method: 'POST' })
+      console.log('[start] Bots restarted')
+      return
+    }
+    // Still not responding, kill it
+    console.log('[start] Killing unresponsive daemon...')
+    process.kill(pid, 'SIGKILL')
+    await new Promise((r) => setTimeout(r, 500))
+  } catch {
+    // Process doesn't exist, stale PID file
+  }
+}
+
+console.log('[start] Starting daemon...')
+mkdirSync(resolve(ROOT, '.spire'), { recursive: true })
+
+const logFd = openSync(LOG_FILE, 'w')
+const child = spawn('bun', [DAEMON], {
+  cwd: ROOT,
+  detached: true,
+  stdio: ['ignore', logFd, logFd],
 })
+child.unref()
+
+console.log(`[start] Daemon started (PID ${child.pid})`)
+console.log(`[start] Viewer: http://localhost:${WEB_PORT}`)
+if (attachLogs) {
+  console.log('[start] Tailing daemon log (Ctrl+C to detach)...')
+  console.log('')
+  tailLog()
+}

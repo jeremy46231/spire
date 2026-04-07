@@ -1,7 +1,7 @@
 {
   "image": "mcr.microsoft.com/devcontainers/universal",
   "onCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "bun start",
+  "postStartCommand": "bun start --detach",
   "portsAttributes": {
     "3000": {
       "label": "Spire",
