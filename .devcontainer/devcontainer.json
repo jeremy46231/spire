@@ -7,5 +7,14 @@
       "label": "Spire",
       "onAutoForward": "openBrowser"
     }
+  },
+  "customizations": {
+    "codespaces": {
+      "disableAutomaticConfiguration": true,
+      "openFiles": ["README.md"]
+    },
+    "vscode": {
+      "extensions": ["oven.bun-vscode"]
+    }
   }
 }

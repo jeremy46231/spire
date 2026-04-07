@@ -9,4 +9,4 @@ bun install
 bun run setup
 
 # Pre-warm Paper (downloads internal jars, then exits)
-cd .spire/server && java -jar paper.jar --help
+(cd .spire/server && java -jar paper.jar -v)
