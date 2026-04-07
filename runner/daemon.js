@@ -1,10 +1,16 @@
 import { spawn } from 'child_process'
-import { Rcon } from 'rcon-client'
-import mineflayer from 'mineflayer'
-import { mineflayer as viewer } from 'prismarine-viewer'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { writeFileSync, unlinkSync } from 'fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  unlinkSync,
+} from 'fs'
+
+// Web server starts first — no heavy deps
+import { broadcast, setStatus, setHandlers } from '../web/server.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -12,13 +18,21 @@ const SERVER_DIR = resolve(ROOT, '.spire/server')
 const SERVER_JAR = resolve(SERVER_DIR, 'paper.jar')
 const BOT_WRAPPER = resolve(__dirname, 'bot-wrapper.js')
 const PID_FILE = resolve(ROOT, '.spire/daemon.pid')
+const ARCHIVE = resolve(ROOT, '.spire/server.tar.zst')
+const DOWNLOAD_URL = 'https://files.jer.app/share/2026-04-spire/server.tar.zst'
 
 const SERVER_HOST = '127.0.0.1'
 const SERVER_PORT = 25565
 const RCON_PORT = 25575
 const RCON_PASSWORD = 'spire'
-const WEB_PORT = 3000
-const VIEWER_PORT = 3001 // internal, proxied through Bun.serve
+const VIEWER_PORT = 3001
+
+// --- Logging ---
+
+function log(line) {
+  console.log(line)
+  broadcast('log', { line })
+}
 
 // --- PID file ---
 
@@ -29,10 +43,19 @@ process.on('exit', () => {
   } catch {}
 })
 
+// --- Web server (start immediately) ---
+
+setHandlers({
+  restartBots: () => restartBots(),
+  stop: () => shutdown(),
+})
+
 // --- Server ---
 
-function startServer() {
-  console.log('[runner] Starting Paper server...')
+let serverProc
+
+function startPaperServer() {
+  log('[runner] Starting Paper server...')
   const proc = spawn(
     'java',
     ['-Xms512M', '-Xmx1G', '-jar', SERVER_JAR, '--nogui'],
@@ -43,15 +66,19 @@ function startServer() {
   )
 
   proc.stdout.on('data', (d) => {
-    const line = d.toString().trimEnd()
-    if (line) console.log('[server]', line)
+    for (const line of d.toString().split('\n')) {
+      const trimmed = line.trimEnd()
+      if (trimmed) log(`[server] ${trimmed}`)
+    }
   })
   proc.stderr.on('data', (d) => {
-    const line = d.toString().trimEnd()
-    if (line) console.error('[server]', line)
+    for (const line of d.toString().split('\n')) {
+      const trimmed = line.trimEnd()
+      if (trimmed) log(`[server] ${trimmed}`)
+    }
   })
   proc.on('exit', (code) => {
-    console.log(`[runner] Server exited with code ${code}`)
+    log(`[runner] Server exited with code ${code}`)
     process.exit(code ?? 1)
   })
 
@@ -61,7 +88,8 @@ function startServer() {
 // --- RCON ---
 
 async function waitForRcon() {
-  console.log('[runner] Waiting for RCON...')
+  const { Rcon } = await import('rcon-client')
+  log('[runner] Waiting for RCON...')
   for (let i = 0; i < 120; i++) {
     try {
       const rcon = new Rcon({
@@ -70,7 +98,7 @@ async function waitForRcon() {
         password: RCON_PASSWORD,
       })
       await rcon.connect()
-      console.log('[runner] RCON connected')
+      log('[runner] RCON connected')
       return rcon
     } catch {
       await new Promise((r) => setTimeout(r, 2000))
@@ -79,10 +107,28 @@ async function waitForRcon() {
   throw new Error('RCON failed to connect after 240s')
 }
 
+// --- Player count polling ---
+
+function startPlayerCountPolling(rcon) {
+  setInterval(async () => {
+    try {
+      const response = await rcon.send('list')
+      const match = response.match(/There are (\d+) of a max of (\d+) players online:(.*)/)
+      if (match) {
+        const names = match[3].trim().split(',').map((n) => n.trim()).filter(Boolean)
+        const count = names.filter((n) => n !== 'SpireViewer').length
+        setStatus({ players: count })
+      }
+    } catch {}
+  }, 5000)
+}
+
 // --- Spectator viewer bot ---
 
 async function startViewerBot(rcon) {
-  console.log('[runner] Creating spectator viewer bot...')
+  const mineflayer = (await import('mineflayer')).default
+  const { mineflayer: viewer } = await import('prismarine-viewer')
+  log('[runner] Creating spectator viewer bot...')
   const bot = mineflayer.createBot({
     host: SERVER_HOST,
     port: SERVER_PORT,
@@ -99,12 +145,12 @@ async function startViewerBot(rcon) {
     bot.once('kick', (reason) => reject(new Error(`Kicked: ${reason}`)))
   })
 
-  console.log('[runner] Viewer bot spawned, setting spectator mode...')
+  log('[runner] Viewer bot spawned, setting spectator mode...')
   await rcon.send('gamemode spectator SpireViewer')
   await rcon.send('tp SpireViewer 0 61 0')
 
   viewer(bot, { viewDistance: 8, firstPerson: false, port: VIEWER_PORT })
-  console.log(`[runner] Prismarine viewer on internal port ${VIEWER_PORT}`)
+  log(`[runner] Prismarine viewer on internal port ${VIEWER_PORT}`)
 
   return bot
 }
@@ -114,7 +160,7 @@ async function startViewerBot(rcon) {
 const botProcs = []
 
 function spawnBotProcess(botScript, username) {
-  console.log(`[runner] Spawning bot "${username}" from ${botScript}`)
+  log(`[runner] Spawning bot "${username}" from ${botScript}`)
 
   const proc = spawn('bun', [BOT_WRAPPER], {
     cwd: ROOT,
@@ -122,15 +168,19 @@ function spawnBotProcess(botScript, username) {
   })
 
   proc.stdout.on('data', (d) => {
-    const line = d.toString().trimEnd()
-    if (line) console.log(`[bot:${username}]`, line)
+    for (const line of d.toString().split('\n')) {
+      const trimmed = line.trimEnd()
+      if (trimmed) log(`[bot:${username}] ${trimmed}`)
+    }
   })
   proc.stderr.on('data', (d) => {
-    const line = d.toString().trimEnd()
-    if (line) console.error(`[bot:${username}]`, line)
+    for (const line of d.toString().split('\n')) {
+      const trimmed = line.trimEnd()
+      if (trimmed) log(`[bot:${username}] ${trimmed}`)
+    }
   })
   proc.on('exit', (code) => {
-    console.log(`[runner] Bot "${username}" exited with code ${code}`)
+    log(`[runner] Bot "${username}" exited with code ${code}`)
     const idx = botProcs.indexOf(proc)
     if (idx !== -1) botProcs.splice(idx, 1)
   })
@@ -171,121 +221,127 @@ function spawnAllBots() {
 }
 
 async function restartBots() {
-  console.log('[runner] Restarting bots...')
+  log('[runner] Restarting bots...')
   await killAllBots()
   spawnAllBots()
-  console.log('[runner] Bots restarted')
-}
-
-// --- Web server (Bun.serve) ---
-
-function startWebServer() {
-  const server = Bun.serve({
-    port: WEB_PORT,
-    async fetch(req, server) {
-      const url = new URL(req.url)
-
-      // API routes
-      if (url.pathname === '/api/status') {
-        return Response.json({
-          ok: true,
-          pid: process.pid,
-          bots: botProcs.length,
-        })
-      }
-
-      if (url.pathname === '/api/restart-bots' && req.method === 'POST') {
-        await restartBots()
-        return Response.json({ ok: true })
-      }
-
-      if (url.pathname === '/api/stop' && req.method === 'POST') {
-        setTimeout(() => shutdown(), 100)
-        return Response.json({ ok: true })
-      }
-
-      // WebSocket upgrade — proxy to prismarine-viewer
-      if (req.headers.get('upgrade')?.toLowerCase() === 'websocket') {
-        const ok = server.upgrade(req, {
-          data: { target: `ws://127.0.0.1:${VIEWER_PORT}${url.pathname}${url.search}` },
-        })
-        return ok ? undefined : new Response('WebSocket upgrade failed', { status: 500 })
-      }
-
-      // HTTP proxy to prismarine-viewer
-      const target = `http://127.0.0.1:${VIEWER_PORT}${url.pathname}${url.search}`
-      try {
-        const proxyRes = await fetch(target, {
-          method: req.method,
-          headers: req.headers,
-          body: req.body,
-        })
-        // Strip content-encoding — Bun's fetch already decompresses the body,
-        // so forwarding the header makes the browser try to decompress again
-        const headers = new Headers(proxyRes.headers)
-        headers.delete('content-encoding')
-        headers.delete('content-length')
-        return new Response(proxyRes.body, {
-          status: proxyRes.status,
-          headers,
-        })
-      } catch {
-        return new Response('Viewer not ready', { status: 502 })
-      }
-    },
-    websocket: {
-      open(ws) {
-        const backend = new WebSocket(ws.data.target)
-        ws.data.backend = backend
-        ws.data.queue = []
-
-        backend.addEventListener('open', () => {
-          for (const msg of ws.data.queue) backend.send(msg)
-          ws.data.queue = null
-        })
-        backend.addEventListener('message', (e) => {
-          ws.send(e.data)
-        })
-        backend.addEventListener('close', () => ws.close())
-        backend.addEventListener('error', () => ws.close())
-      },
-      message(ws, msg) {
-        if (ws.data.queue) {
-          ws.data.queue.push(msg)
-        } else {
-          ws.data.backend?.send(msg)
-        }
-      },
-      close(ws) {
-        ws.data.backend?.close()
-      },
-    },
-  })
-
-  console.log(`[runner] Web server on http://localhost:${WEB_PORT}`)
-  return server
+  log('[runner] Bots restarted')
 }
 
 // --- Shutdown ---
 
 async function shutdown() {
-  console.log('[runner] Shutting down...')
+  log('[runner] Shutting down...')
   await killAllBots()
-  serverProc.kill('SIGTERM')
+  if (serverProc) serverProc.kill('SIGTERM')
   process.exit(0)
 }
 
-// --- Main ---
+// --- Setup: Java ---
 
-const serverProc = startServer()
+async function ensureJava() {
+  try {
+    const proc = Bun.spawnSync(['java', '-version'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    if (proc.exitCode === 0) return
+  } catch {}
+
+  if (process.platform !== 'linux') {
+    throw new Error('Java is not installed and auto-install is only supported on Linux')
+  }
+
+  setStatus({ phase: 'installing-java' })
+  log('[runner] Java not found, installing...')
+
+  await new Promise((resolve, reject) => {
+    const proc = spawn('apt-get', ['install', '-y', 'default-jre-headless'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    proc.stdout.on('data', (d) => {
+      for (const line of d.toString().split('\n')) {
+        const trimmed = line.trimEnd()
+        if (trimmed) log(`[install] ${trimmed}`)
+      }
+    })
+    proc.stderr.on('data', (d) => {
+      for (const line of d.toString().split('\n')) {
+        const trimmed = line.trimEnd()
+        if (trimmed) log(`[install] ${trimmed}`)
+      }
+    })
+    proc.on('exit', (code) => {
+      if (code === 0) resolve()
+      else reject(new Error(`apt-get install failed with code ${code}`))
+    })
+    proc.on('error', reject)
+  })
+
+  log('[runner] Java installed successfully')
+}
+
+// --- Setup: Server download ---
+
+async function ensureServer() {
+  if (existsSync(SERVER_DIR)) return
+
+  setStatus({ phase: 'downloading-server' })
+  log('[runner] Server not found, downloading...')
+
+  mkdirSync(resolve(ROOT, '.spire'), { recursive: true })
+
+  if (existsSync(ARCHIVE)) {
+    log('[runner] Using local .spire/server.tar.zst')
+  } else {
+    log(`[runner] Downloading ${DOWNLOAD_URL}`)
+    const res = await fetch(DOWNLOAD_URL)
+    if (!res.ok) {
+      throw new Error(`Download failed: ${res.status} ${res.statusText}`)
+    }
+    writeFileSync(ARCHIVE, Buffer.from(await res.arrayBuffer()))
+    log('[runner] Download complete')
+  }
+
+  log('[runner] Decompressing...')
+  const { decompress } = await import('fzstd')
+  const tar = await import('tar')
+  const { Readable } = await import('stream')
+  const { pipeline } = await import('stream/promises')
+
+  const compressed = readFileSync(ARCHIVE)
+  const tarData = Buffer.from(decompress(compressed))
+
+  mkdirSync(SERVER_DIR, { recursive: true })
+
+  log('[runner] Extracting to .spire/server/')
+  await pipeline(Readable.from(tarData), tar.x({ cwd: SERVER_DIR }))
+  log('[runner] Server extracted')
+}
+
+// --- Main ---
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => shutdown())
 }
 
+setStatus({ phase: 'starting' })
+
+await ensureJava()
+await ensureServer()
+
+setStatus({ phase: 'starting-server' })
+serverProc = startPaperServer()
+
 const rcon = await waitForRcon()
+
+await rcon.send('fill -10 60 -10 10 60 10 oak_planks')
+
 const viewerBot = await startViewerBot(rcon)
-startWebServer()
+setStatus({ viewerReady: true })
+
 spawnAllBots()
 
-console.log('[runner] Everything is running.')
+startPlayerCountPolling(rcon)
+
+setStatus({ phase: 'ready' })
+log('[runner] Everything is running.')
