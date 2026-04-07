@@ -1,13 +1,7 @@
 import { spawn } from 'child_process'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-  unlinkSync,
-} from 'fs'
+import { unlinkSync, writeFileSync } from 'fs'
 
 // Web server starts first — no heavy deps
 import { broadcast, setStatus, setHandlers } from '../web/server.js'
@@ -18,9 +12,6 @@ const SERVER_DIR = resolve(ROOT, '.spire/server')
 const SERVER_JAR = resolve(SERVER_DIR, 'paper.jar')
 const BOT_WRAPPER = resolve(__dirname, 'bot-wrapper.js')
 const PID_FILE = resolve(ROOT, '.spire/daemon.pid')
-const ARCHIVE = resolve(ROOT, '.spire/server.tar.zst')
-const DOWNLOAD_URL = 'https://files.jer.app/share/2026-04-spire/server.tar.zst'
-
 const SERVER_HOST = '127.0.0.1'
 const SERVER_PORT = 25565
 const RCON_PORT = 25575
@@ -236,98 +227,11 @@ async function shutdown() {
   process.exit(0)
 }
 
-// --- Setup: Java ---
-
-async function ensureJava() {
-  try {
-    const proc = Bun.spawnSync(['java', '-version'], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
-    if (proc.exitCode === 0) return
-  } catch {}
-
-  if (process.platform !== 'linux') {
-    throw new Error('Java is not installed and auto-install is only supported on Linux')
-  }
-
-  setStatus({ phase: 'installing-java' })
-  log('[runner] Java not found, installing...')
-
-  await new Promise((resolve, reject) => {
-    const proc = spawn('apt-get', ['install', '-y', 'default-jre-headless'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    proc.stdout.on('data', (d) => {
-      for (const line of d.toString().split('\n')) {
-        const trimmed = line.trimEnd()
-        if (trimmed) log(`[install] ${trimmed}`)
-      }
-    })
-    proc.stderr.on('data', (d) => {
-      for (const line of d.toString().split('\n')) {
-        const trimmed = line.trimEnd()
-        if (trimmed) log(`[install] ${trimmed}`)
-      }
-    })
-    proc.on('exit', (code) => {
-      if (code === 0) resolve()
-      else reject(new Error(`apt-get install failed with code ${code}`))
-    })
-    proc.on('error', reject)
-  })
-
-  log('[runner] Java installed successfully')
-}
-
-// --- Setup: Server download ---
-
-async function ensureServer() {
-  if (existsSync(SERVER_DIR)) return
-
-  setStatus({ phase: 'downloading-server' })
-  log('[runner] Server not found, downloading...')
-
-  mkdirSync(resolve(ROOT, '.spire'), { recursive: true })
-
-  if (existsSync(ARCHIVE)) {
-    log('[runner] Using local .spire/server.tar.zst')
-  } else {
-    log(`[runner] Downloading ${DOWNLOAD_URL}`)
-    const res = await fetch(DOWNLOAD_URL)
-    if (!res.ok) {
-      throw new Error(`Download failed: ${res.status} ${res.statusText}`)
-    }
-    writeFileSync(ARCHIVE, Buffer.from(await res.arrayBuffer()))
-    log('[runner] Download complete')
-  }
-
-  log('[runner] Decompressing...')
-  const { decompress } = await import('fzstd')
-  const tar = await import('tar')
-  const { Readable } = await import('stream')
-  const { pipeline } = await import('stream/promises')
-
-  const compressed = readFileSync(ARCHIVE)
-  const tarData = Buffer.from(decompress(compressed))
-
-  mkdirSync(SERVER_DIR, { recursive: true })
-
-  log('[runner] Extracting to .spire/server/')
-  await pipeline(Readable.from(tarData), tar.x({ cwd: SERVER_DIR }))
-  log('[runner] Server extracted')
-}
-
 // --- Main ---
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => shutdown())
 }
-
-setStatus({ phase: 'starting' })
-
-await ensureJava()
-await ensureServer()
 
 setStatus({ phase: 'starting-server' })
 serverProc = startPaperServer()

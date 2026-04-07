@@ -1,0 +1,11 @@
+{
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "onCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "$HOME/.bun/bin/bun start",
+  "portsAttributes": {
+    "3000": {
+      "label": "Spire",
+      "onAutoForward": "openBrowser"
+    }
+  }
+}

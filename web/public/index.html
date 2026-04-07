@@ -36,10 +36,6 @@
         text = 'Ready — ' + s.players + ' player' + (s.players !== 1 ? 's' : '')
       } else if (s.phase === 'starting') {
         text = 'Starting...'
-      } else if (s.phase === 'installing-java') {
-        text = 'Installing Java...'
-      } else if (s.phase === 'downloading-server') {
-        text = 'Downloading server...'
       } else if (s.phase === 'starting-server') {
         text = 'Starting server...'
       }
