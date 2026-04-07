@@ -1,0 +1,23 @@
+{
+  "type": "module",
+  "scripts": {
+    "start": "bun runner/start.js",
+    "stop": "bun runner/stop.js",
+    "console": "bun runner/console.js",
+    "setup": "bun runner/setup.js",
+    "compress-template": "bun runner/compress-template.js"
+  },
+  "dependencies": {
+    "canvas": "^3.2.3",
+    "fzstd": "^0.1.1",
+    "mineflayer": "^4.37.0",
+    "prismarine-viewer": "^1.33.0",
+    "rcon-client": "^4.2.5",
+    "tar": "^7.5.13"
+  },
+  "patchedDependencies": {
+    "prismarine-viewer@1.33.0": "patches/prismarine-viewer@1.33.0.patch",
+    "mineflayer@4.37.0": "patches/mineflayer@4.37.0.patch",
+    "minecraft-protocol@1.66.0": "patches/minecraft-protocol@1.66.0.patch"
+  }
+}

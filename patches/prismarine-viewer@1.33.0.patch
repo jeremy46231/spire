@@ -1,0 +1,10 @@
+diff --git a/viewer/lib/version.js b/viewer/lib/version.js
+index 39e3ad8670f3d4a756c99e14ea258df0bbb4c252..88f5923c5d58c591ef83b15b74b3a686cdb8af2f 100644
+--- a/viewer/lib/version.js
++++ b/viewer/lib/version.js
+@@ -1,4 +1,4 @@
+-const supportedVersions = ['1.8.8', '1.9.4', '1.10.2', '1.11.2', '1.12.2', '1.13.2', '1.14.4', '1.15.2', '1.16.1', '1.16.4', '1.17.1', '1.18.1', '1.19', '1.20.1', '1.21.1', '1.21.4']
++const supportedVersions = ['1.8.8', '1.9.4', '1.10.2', '1.11.2', '1.12.2', '1.13.2', '1.14.4', '1.15.2', '1.16.1', '1.16.4', '1.17.1', '1.18.1', '1.19', '1.20.1', '1.21.1', '1.21.4', '1.21.11']
+ 
+ const lastOfMajor = {}
+ for (const version of supportedVersions) {
