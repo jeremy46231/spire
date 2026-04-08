@@ -22,6 +22,7 @@ const BOT_CATALOG = {
   basic: [
     { filePath: 'runner/bots/basic/looker', username: 'LookerBot' },
     { filePath: 'runner/bots/basic/walker', username: 'WalkerBot' },
+    { filePath: 'runner/bots/basic/camper', username: 'CamperBot' },
   ],
 }
 
@@ -60,6 +61,19 @@ function randFloat(min, max) {
   return Math.random() * (max - min) + min
 }
 
+const MIN_SPAWN_RADIUS = 10
+const MAX_SPAWN_RADIUS = 20
+const SPAWN_Y = 60
+
+function randSpawn() {
+  const angle = Math.random() * 2 * Math.PI
+  const radius = Math.sqrt(Math.random() * (MAX_SPAWN_RADIUS ** 2 - MIN_SPAWN_RADIUS ** 2) + MIN_SPAWN_RADIUS ** 2)
+  const x = Math.round(Math.cos(angle) * radius)
+  const z = Math.round(Math.sin(angle) * radius)
+  const yaw = Math.random() * 360 - 180
+  return `${x} ${SPAWN_Y} ${z} ${yaw} 0`
+}
+
 async function resetPlayer(username) {
   log(`[runner] Resetting player data for "${username}"`)
   const commands = [
@@ -69,7 +83,7 @@ async function resetPlayer(username) {
     `effect clear ${username}`,
     `gamemode survival ${username}`,
     `advancement revoke ${username} everything`,
-    `tp ${username} ${randFloat(-4.5, 5.5)} 60 ${randFloat(-4.5, 5.5)} ${randFloat(-180, 179.99)} 0`,
+    `tp ${username} ${randSpawn()}`,
   ]
   for (const cmd of commands) {
     await sendRcon(cmd)

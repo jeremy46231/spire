@@ -104,7 +104,8 @@ setRconClient(rcon)
 const viewerBot = await startViewerBot(rcon)
 
 // temp because there isn't a world yet
-await rcon.send('fill -10 59 -10 10 59 10 oak_planks')
+await rcon.send('fill -20 59 -20 20 59 20 grass_block')
+await rcon.send('setblock 0 59 0 diamond_block')
 await rcon.send('gamerule advance_time false')
 await rcon.send('gamerule advance_weather false')
 

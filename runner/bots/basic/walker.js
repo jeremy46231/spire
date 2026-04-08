@@ -5,11 +5,10 @@ export function onInit(bot) {
   bot.pathfinder.setMovements(defaultMove)
 
   function walkToRandom() {
-    // from -7 to 7 inclusive
-    const x = Math.floor(Math.random() * 15) - 7
-    const z = Math.floor(Math.random() * 15) - 7
+    const x = Math.floor(Math.random() * 31) - 15
+    const z = Math.floor(Math.random() * 31) - 15
     console.log(`Walking to ${x}, ${z}`)
-    bot.pathfinder.setGoal(new goals.GoalNearXZ(x, z, 0.5))
+    bot.pathfinder.setGoal(new goals.GoalNearXZ(x, z, 1))
   }
 
   setInterval(() => {
