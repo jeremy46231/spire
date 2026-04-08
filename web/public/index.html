@@ -1,106 +1,559 @@
 <!doctype html>
-<html lang="en" style="height: 100%; margin: 0">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Spire</title>
-  </head>
-  <body
-    style="
-      height: 100%;
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      font-family: sans-serif;
-    "
-  >
-    <div id="status" style="padding: 8px 12px; border-bottom: 1px solid #ccc">
-      Starting...
-    </div>
-    <iframe
-      id="viewer"
-      src="/viewer/"
-      style="flex: 1; border: none; display: none"
-    ></iframe>
-    <div id="console-section" style="border-top: 1px solid #ccc">
-      <button
-        id="console-toggle"
-        style="
-          width: 100%;
-          padding: 4px 12px;
-          text-align: left;
-          border: none;
-          background: #222;
-          color: #eee;
-          cursor: pointer;
-          font-size: 12px;
-        "
-      >
-        ▼ Console
-      </button>
-      <div
-        id="console"
-        style="
-          overflow-y: auto;
-          height: 200px;
-          font-family: monospace;
-          font-size: 12px;
-          white-space: pre-wrap;
-          background: #111;
-          color: #eee;
-          padding: 8px;
-        "
-      ></div>
-    </div>
-    <script>
-      var statusEl = document.getElementById('status')
-      var viewerEl = document.getElementById('viewer')
-      var consoleEl = document.getElementById('console')
-      var toggleBtn = document.getElementById('console-toggle')
-      var consoleVisible = true
-
-      toggleBtn.addEventListener('click', function () {
-        consoleVisible = !consoleVisible
-        consoleEl.style.display = consoleVisible ? 'block' : 'none'
-        toggleBtn.textContent = (consoleVisible ? '▼' : '▶') + ' Console'
-      })
-
-      function appendLine(line) {
-        consoleEl.textContent += line + '\n'
-        consoleEl.scrollTop = consoleEl.scrollHeight
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+        background: #fff;
+        color: #000;
+        font-family: system-ui, sans-serif;
+        font-size: 14px;
       }
 
-      function updateStatus(s) {
-        var text = s.phase
-        if (s.phase === 'ready') {
-          text =
-            'Ready — ' + s.players + ' player' + (s.players !== 1 ? 's' : '')
-        } else if (s.phase === 'starting') {
-          text = 'Starting...'
-        } else if (s.phase === 'starting-server') {
-          text = 'Starting server...'
-        }
-        statusEl.textContent = text
+      .shell {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        height: 100%;
+      }
 
-        viewerEl.style.display = s.viewerReady ? 'block' : 'none'
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid #ddd;
+        overflow-y: auto;
+      }
+
+      .section {
+        padding: 16px;
+      }
+      .section + .section {
+        border-top: 1px solid #eee;
+      }
+
+      /* Status table */
+      .status-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .status-table td {
+        padding: 6px 0;
+      }
+      .status-table td:first-child {
+        color: #666;
+      }
+      .status-table td:last-child {
+        text-align: right;
+        font-weight: 500;
+      }
+      .status-table tr + tr td {
+        border-top: 1px solid #eee;
+      }
+
+      .green {
+        color: #22a355;
+      }
+      .yellow {
+        color: #b08800;
+      }
+      .red {
+        color: #d33;
+      }
+
+      /* Bot list */
+      .bot-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 0;
+        font-size: 13px;
+      }
+      .bot-row + .bot-row {
+        border-top: 1px solid #eee;
+      }
+      .bot-row input[type='checkbox'] {
+        margin: 0;
+      }
+      .bot-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .bot-name .file {
+        color: #999;
+        font-size: 11px;
+      }
+      .bot-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #999;
+        font-size: 14px;
+        padding: 0 2px;
+        line-height: 1;
+      }
+      .bot-btn:hover {
+        color: #000;
+      }
+      .bot-btn.remove:hover {
+        color: #d33;
+      }
+
+      .bot-left {
+        width: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .add-select {
+        margin-top: 8px;
+        width: 100%;
+        font: inherit;
+        font-size: 13px;
+        padding: 5px 6px;
+      }
+
+      /* Controls */
+      .controls {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .btn {
+        padding: 7px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: #fff;
+        color: #000;
+        font: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+      .btn:hover {
+        background: #f5f5f5;
+      }
+      .btn.danger:hover {
+        border-color: #d33;
+        color: #d33;
+      }
+
+      /* Main */
+      .main {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .viewer-wrap {
+        flex: 1;
+        position: relative;
+        background: #000;
+      }
+      .viewer-wrap iframe {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+      .viewer-placeholder {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #888;
+        font-size: 13px;
+      }
+
+      .panel-wrap {
+        border-top: 1px solid #ddd;
+        display: flex;
+        flex-direction: column;
+        height: 210px;
+      }
+      .panel-tabs {
+        display: flex;
+        background: #fafafa;
+        border-bottom: 1px solid #eee;
+        flex-shrink: 0;
+      }
+      .panel-tab {
+        padding: 0 12px;
+        height: 30px;
+        border: none;
+        background: none;
+        font: inherit;
+        font-size: 13px;
+        color: #666;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+      }
+      .panel-tab:hover {
+        color: #000;
+      }
+      .panel-tab.active {
+        color: #000;
+        border-bottom-color: #000;
+      }
+      .panel-body {
+        display: none;
+        overflow-y: auto;
+        flex: 1;
+        font-family: monospace;
+        font-size: 12px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-all;
+        background: #111;
+        color: #ccc;
+        padding: 8px 12px;
+      }
+      .panel-body.active {
+        display: block;
+      }
+      .rcon-input-wrap {
+        display: none;
+        border-top: 1px solid #333;
+        background: #111;
+        flex-shrink: 0;
+      }
+      .rcon-input-wrap.active {
+        display: flex;
+      }
+      .rcon-input-wrap span {
+        padding: 6px 0 6px 12px;
+        color: #888;
+        font-family: monospace;
+        font-size: 12px;
+      }
+      .rcon-input {
+        flex: 1;
+        background: none;
+        border: none;
+        color: #ccc;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 6px 12px 6px 4px;
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="section">
+          <table class="status-table">
+            <tr>
+              <td>Status</td>
+              <td id="stat-phase" class="yellow">Starting…</td>
+            </tr>
+            <tr>
+              <td>Players</td>
+              <td id="stat-players">0</td>
+            </tr>
+            <tr>
+              <td>Viewer</td>
+              <td id="stat-viewer" class="yellow">…</td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="section" id="bots-section">
+          <div id="bot-list"></div>
+          <select class="add-select" id="add-bot-select">
+            <option value="" selected disabled>+ Add bot</option>
+          </select>
+        </div>
+
+        <div class="section">
+          <div class="controls">
+            <button class="btn" id="btn-restart-bots">Restart all bots</button>
+            <button class="btn danger" id="btn-stop">Stop server</button>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="viewer-wrap">
+          <div id="viewer-placeholder" class="viewer-placeholder">
+            Waiting for viewer…
+          </div>
+          <iframe id="viewer" src="/viewer/" style="display: none"></iframe>
+        </div>
+        <div class="panel-wrap">
+          <div class="panel-tabs">
+            <button class="panel-tab active" data-tab="logs">Logs</button>
+            <button class="panel-tab" data-tab="console">Console</button>
+          </div>
+          <div class="panel-body active" id="logs"></div>
+          <div class="panel-body" id="console-output"></div>
+          <div class="rcon-input-wrap" id="rcon-wrap">
+            <span>&gt;</span>
+            <input
+              class="rcon-input"
+              id="rcon-input"
+              placeholder="Enter command…"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      var viewerEl = document.getElementById('viewer')
+      var viewerPlaceholder = document.getElementById('viewer-placeholder')
+      var logsEl = document.getElementById('logs')
+      var consoleOutput = document.getElementById('console-output')
+      var rconWrap = document.getElementById('rcon-wrap')
+      var rconInput = document.getElementById('rcon-input')
+      var statPhase = document.getElementById('stat-phase')
+      var statPlayers = document.getElementById('stat-players')
+      var statViewer = document.getElementById('stat-viewer')
+      var botListEl = document.getElementById('bot-list')
+      var addSelect = document.getElementById('add-bot-select')
+      var tabs = document.querySelectorAll('.panel-tab')
+      var activeTab = 'logs'
+      var currentBots = []
+      var catalog = {}
+
+      // Tab switching
+      tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+          activeTab = tab.dataset.tab
+          tabs.forEach(function (t) {
+            t.classList.toggle('active', t.dataset.tab === activeTab)
+          })
+          logsEl.classList.toggle('active', activeTab === 'logs')
+          consoleOutput.classList.toggle('active', activeTab === 'console')
+          rconWrap.classList.toggle('active', activeTab === 'console')
+          if (activeTab === 'console') rconInput.focus()
+        })
+      })
+
+      // Buttons
+      document
+        .getElementById('btn-restart-bots')
+        .addEventListener('click', function () {
+          fetch('/api/restart-bots', { method: 'POST' })
+        })
+
+      document
+        .getElementById('btn-stop')
+        .addEventListener('click', function () {
+          if (confirm('Stop the server and all bots?')) {
+            fetch('/api/stop', { method: 'POST' })
+          }
+        })
+
+      // RCON console
+      function stripSectionCodes(str) {
+        return str.replace(/\u00a7[0-9a-fk-or]/gi, '')
+      }
+
+      function appendConsole(text, cls) {
+        var el = document.createElement('div')
+        el.textContent = text
+        if (cls) el.style.color = cls
+        consoleOutput.appendChild(el)
+        consoleOutput.scrollTop = consoleOutput.scrollHeight
+      }
+
+      rconInput.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return
+        var cmd = rconInput.value.trim()
+        if (!cmd) return
+        rconInput.value = ''
+        appendConsole('> ' + cmd, '#888')
+        fetch('/api/rcon', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: cmd }),
+        })
+          .then(function (r) {
+            return r.json()
+          })
+          .then(function (data) {
+            if (data.error) {
+              appendConsole(data.error, '#d33')
+            } else {
+              var cleaned = stripSectionCodes(data.response || '')
+              if (cleaned) appendConsole(cleaned)
+            }
+          })
+          .catch(function () {
+            appendConsole('Request failed', '#d33')
+          })
+      })
+
+      // Logs
+      function appendLog(line) {
+        logsEl.textContent += line + '\n'
+        logsEl.scrollTop = logsEl.scrollHeight
+      }
+
+      // Bot list
+      function renderBots() {
+        botListEl.innerHTML = ''
+        currentBots.forEach(function (bot) {
+          var row = document.createElement('div')
+          row.className = 'bot-row'
+
+          var left = document.createElement('div')
+          left.className = 'bot-left'
+
+          if (bot.isDefault) {
+            var cb = document.createElement('input')
+            cb.type = 'checkbox'
+            cb.checked = bot.enabled
+            cb.addEventListener('change', function () {
+              fetch('/api/bots/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: bot.id, enabled: cb.checked }),
+              })
+            })
+            left.appendChild(cb)
+          } else {
+            var remove = document.createElement('button')
+            remove.className = 'bot-btn remove'
+            remove.textContent = '×'
+            remove.title = 'Remove'
+            remove.addEventListener('click', function () {
+              fetch('/api/bots/remove', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: bot.id }),
+              })
+            })
+            left.appendChild(remove)
+          }
+          row.appendChild(left)
+
+          var name = document.createElement('div')
+          name.className = 'bot-name'
+          name.innerHTML =
+            bot.username +
+            ' <span class="file">' +
+            escHtml(bot.filePath) +
+            '</span>'
+          row.appendChild(name)
+
+          var restart = document.createElement('button')
+          restart.className = 'bot-btn'
+          restart.textContent = '↻'
+          restart.title = 'Restart'
+          restart.addEventListener('click', function () {
+            fetch('/api/bots/restart', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: bot.id }),
+            })
+          })
+          row.appendChild(restart)
+
+          botListEl.appendChild(row)
+        })
+      }
+
+      function escHtml(s) {
+        return s
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+      }
+
+      // Add bot select
+      function populateAddSelect(cat) {
+        addSelect.innerHTML = '<option value="" selected disabled>+ Add bot</option>'
+        var categories = Object.keys(cat)
+        categories.forEach(function (name) {
+          var group = document.createElement('optgroup')
+          group.label = name === 'user' ? 'Your bots' : name
+          cat[name].forEach(function (entry, i) {
+            var opt = document.createElement('option')
+            opt.value = name + ':' + i
+            opt.textContent = entry.username + ' — ' + entry.filePath
+            group.appendChild(opt)
+          })
+          addSelect.appendChild(group)
+        })
+      }
+
+      addSelect.addEventListener('change', function () {
+        var parts = addSelect.value.split(':')
+        var entry = catalog[parts[0]][parseInt(parts[1])]
+        addSelect.value = ''
+        fetch('/api/bots/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath: entry.filePath, username: entry.username }),
+        })
+      })
+
+      // Fetch catalog once
+      fetch('/api/bots/catalog')
+        .then(function (r) { return r.json() })
+        .then(function (data) {
+          catalog = data
+          populateAddSelect(data)
+        })
+
+      function updateStatus(s) {
+        var phaseMap = {
+          'starting': ['Starting…', 'yellow'],
+          'starting-server': ['Starting server…', 'yellow'],
+          'ready': ['Ready', 'green'],
+        }
+        var info = phaseMap[s.phase] || [s.phase, '']
+        statPhase.textContent = info[0]
+        statPhase.className = info[1]
+
+        if (s.players != null) statPlayers.textContent = s.players
+
+        if (s.viewerReady) {
+          statViewer.textContent = 'Online'
+          statViewer.className = 'green'
+          viewerEl.style.display = 'block'
+          viewerPlaceholder.style.display = 'none'
+        } else {
+          statViewer.textContent = '…'
+          statViewer.className = 'yellow'
+          viewerEl.style.display = 'none'
+          viewerPlaceholder.style.display = 'flex'
+        }
       }
 
       function connect() {
         var proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
         var ws = new WebSocket(proto + '//' + location.host + '/ws')
-
         ws.onmessage = function (e) {
           var msg = JSON.parse(e.data)
           if (msg.type === 'backlog') {
-            consoleEl.textContent = ''
-            msg.lines.forEach(appendLine)
+            logsEl.textContent = ''
+            msg.lines.forEach(appendLog)
           } else if (msg.type === 'status') {
             updateStatus(msg)
           } else if (msg.type === 'log') {
-            appendLine(msg.line)
+            appendLog(msg.line)
+          } else if (msg.type === 'bots') {
+            currentBots = msg.bots
+            renderBots()
           }
         }
-
         ws.onclose = function () {
           setTimeout(connect, 2000)
         }

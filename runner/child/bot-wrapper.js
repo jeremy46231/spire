@@ -13,22 +13,32 @@ process.stdin.on('data', (chunk) => {
   }
 })
 
-function waitForLine() {
+function waitForMessage(type) {
   return new Promise((resolve) => {
     const handler = (line) => {
-      lineHandlers.splice(lineHandlers.indexOf(handler), 1)
-      resolve(line)
+      try {
+        const msg = JSON.parse(line)
+        if (msg.type === type) {
+          lineHandlers.splice(lineHandlers.indexOf(handler), 1)
+          resolve(msg)
+        }
+      } catch {}
     }
     lineHandlers.push(handler)
   })
 }
 
+function send(msg) {
+  process.stdout.write('\x00' + JSON.stringify(msg) + '\n')
+}
+
 // Wait for init message from runner
-const { config } = JSON.parse(await waitForLine())
+const { config } = await waitForMessage('init')
 const { serverHost, serverPort, username, botScript } = config
 
 // Import mineflayer and create bot
 const mineflayer = await import('mineflayer')
+const { pathfinder } = await import('mineflayer-pathfinder')
 
 const bot = mineflayer.default.createBot({
   host: serverHost,
@@ -38,6 +48,8 @@ const bot = mineflayer.default.createBot({
   hideErrors: false,
 })
 
+bot.loadPlugin(pathfinder)
+
 // Wait for spawn
 await new Promise((resolve, reject) => {
   bot.once('spawn', resolve)
@@ -45,9 +57,13 @@ await new Promise((resolve, reject) => {
   bot.once('kick', (reason) => reject(new Error(`Kicked: ${reason}`)))
 })
 
-console.log(`Bot "${username}" spawned at ${bot.entity.position}`)
+console.log(`Bot "${username}" spawned`)
 
-// Now import the competitor's bot code
+// Tell daemon we're in the server, then wait for it to finish resetting us
+send({ type: 'spawned' })
+await waitForMessage('start')
+
+// Now import the user's bot code
 try {
   const mod = await import(pathToFileURL(botScript).href)
   if (typeof mod.onInit === 'function') {

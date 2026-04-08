@@ -4,8 +4,8 @@ import { fileURLToPath } from 'url'
 import { existsSync } from 'fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const TEMPLATE_DIR = resolve(__dirname, '../.spire/server-template')
-const OUTPUT = resolve(__dirname, '../.spire/server.tar.zst')
+const TEMPLATE_DIR = resolve(__dirname, '../../.spire/server-template')
+const OUTPUT = resolve(__dirname, '../../.spire/server.tar.zst')
 
 if (!existsSync(TEMPLATE_DIR)) {
   console.error(`[compress] ${TEMPLATE_DIR} does not exist`)

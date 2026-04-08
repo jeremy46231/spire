@@ -7,8 +7,8 @@ import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const SERVER_DIR = resolve(__dirname, '../.spire/server')
-const ARCHIVE = resolve(__dirname, '../.spire/server.tar.zst')
+const SERVER_DIR = resolve(__dirname, '../../.spire/server')
+const ARCHIVE = resolve(__dirname, '../../.spire/server.tar.zst')
 
 const DOWNLOAD_URL = 'https://files.jer.app/share/2026-04-spire/server.tar.zst'
 
@@ -17,7 +17,7 @@ if (existsSync(SERVER_DIR)) {
   process.exit(0)
 }
 
-mkdirSync(resolve(__dirname, '../.spire'), { recursive: true })
+mkdirSync(resolve(__dirname, '../../.spire'), { recursive: true })
 
 // use local archive if it exists, otherwise download
 if (existsSync(ARCHIVE)) {

@@ -44,10 +44,24 @@ export function setStatus(updates) {
 
 let onRestartBots = async () => {}
 let onStop = async () => {}
+let onRcon = async () => ({ error: 'Not connected' })
+let onAddBot = async () => {}
+let onRemoveBot = async () => {}
+let onToggleBot = async () => {}
+let onRestartBot = async () => {}
+let onGetBots = () => []
+let onGetCatalog = () => ({})
 
-export function setHandlers({ restartBots, stop }) {
-  if (restartBots) onRestartBots = restartBots
-  if (stop) onStop = stop
+export function setHandlers(h) {
+  if (h.restartBots) onRestartBots = h.restartBots
+  if (h.stop) onStop = h.stop
+  if (h.rcon) onRcon = h.rcon
+  if (h.addBot) onAddBot = h.addBot
+  if (h.removeBot) onRemoveBot = h.removeBot
+  if (h.toggleBot) onToggleBot = h.toggleBot
+  if (h.restartBot) onRestartBot = h.restartBot
+  if (h.getBots) onGetBots = h.getBots
+  if (h.getCatalog) onGetCatalog = h.getCatalog
 }
 
 // --- Server ---
@@ -96,7 +110,52 @@ const server = Bun.serve({
     }
 
     if (url.pathname === '/api/stop' && req.method === 'POST') {
-      await onStop()
+      // Respond first so callers don't lose the response while daemon exits.
+      setTimeout(() => {
+        Promise.resolve(onStop()).catch(() => {})
+      }, 0)
+      return Response.json({ ok: true })
+    }
+
+    if (url.pathname === '/api/rcon' && req.method === 'POST') {
+      try {
+        const body = await req.json()
+        const result = await onRcon(body.command)
+        return Response.json(result)
+      } catch (e) {
+        return Response.json({ error: String(e.message || e) })
+      }
+    }
+
+    if (url.pathname === '/api/bots' && req.method === 'GET') {
+      return Response.json({ bots: onGetBots() })
+    }
+
+    if (url.pathname === '/api/bots/catalog' && req.method === 'GET') {
+      return Response.json(onGetCatalog())
+    }
+
+    if (url.pathname === '/api/bots/add' && req.method === 'POST') {
+      const body = await req.json()
+      await onAddBot(body.filePath, body.username)
+      return Response.json({ ok: true })
+    }
+
+    if (url.pathname === '/api/bots/remove' && req.method === 'POST') {
+      const body = await req.json()
+      await onRemoveBot(body.id)
+      return Response.json({ ok: true })
+    }
+
+    if (url.pathname === '/api/bots/toggle' && req.method === 'POST') {
+      const body = await req.json()
+      await onToggleBot(body.id, body.enabled)
+      return Response.json({ ok: true })
+    }
+
+    if (url.pathname === '/api/bots/restart' && req.method === 'POST') {
+      const body = await req.json()
+      await onRestartBot(body.id)
       return Response.json({ ok: true })
     }
 
@@ -137,6 +196,7 @@ const server = Bun.serve({
         wsClients.add(ws)
         ws.send(JSON.stringify({ type: 'backlog', lines: [...logBuffer] }))
         ws.send(JSON.stringify({ type: 'status', ...status }))
+        ws.send(JSON.stringify({ type: 'bots', bots: onGetBots() }))
         return
       }
 

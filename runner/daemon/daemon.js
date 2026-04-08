@@ -1,0 +1,118 @@
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
+import { unlinkSync, writeFileSync } from 'fs'
+
+import { setStatus, setHandlers } from '../../web/server.js'
+import { log } from './log.js'
+import { startPaperServer, waitForProcessExit } from './server.js'
+import { waitForRcon, setRconClient, getRconClient, sendRcon } from './rcon.js'
+import { startViewerBot, startPlayerCountPolling } from './viewer.js'
+import {
+  initBots,
+  addBot,
+  removeBot,
+  toggleBot,
+  restartBot,
+  restartBots,
+  killAllBots,
+  getBotList,
+  getBotCatalog,
+} from './bots.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const ROOT = resolve(__dirname, '../..')
+const SERVER_DIR = resolve(ROOT, '.spire/server')
+const SERVER_JAR = resolve(SERVER_DIR, 'paper.jar')
+const BOT_WRAPPER = resolve(__dirname, '../child/bot-wrapper.js')
+const PID_FILE = resolve(ROOT, '.spire/daemon.pid')
+
+initBots(ROOT, BOT_WRAPPER)
+
+// --- PID file ---
+
+writeFileSync(PID_FILE, String(process.pid))
+process.on('exit', () => {
+  try {
+    unlinkSync(PID_FILE)
+  } catch {}
+})
+
+// --- Web server handlers ---
+
+setHandlers({
+  restartBots: () => restartBots(),
+  stop: () => shutdown(),
+  rcon: (cmd) => sendRcon(cmd),
+  addBot: (filePath, username) => addBot(filePath, username),
+  removeBot: (id) => removeBot(id),
+  toggleBot: (id, enabled) => toggleBot(id, enabled),
+  restartBot: (id) => restartBot(id),
+  getBots: () => getBotList(),
+  getCatalog: () => getBotCatalog(),
+})
+
+// --- Shutdown ---
+
+let serverProc
+let shuttingDown = false
+
+async function shutdown() {
+  if (shuttingDown) return new Promise(() => {})
+  shuttingDown = true
+
+  log('[runner] Shutting down...')
+  await killAllBots()
+  if (serverProc && serverProc.exitCode === null) {
+    try {
+      await getRconClient().send('stop')
+    } catch {}
+
+    const cleanExit = await waitForProcessExit(serverProc, 10000)
+    if (!cleanExit) {
+      try {
+        serverProc.kill('SIGTERM')
+      } catch {}
+      const termExit = await waitForProcessExit(serverProc, 3000)
+      if (!termExit) {
+        try {
+          serverProc.kill('SIGKILL')
+        } catch {}
+        await waitForProcessExit(serverProc, 1000)
+      }
+    }
+  }
+
+  try {
+    await getRconClient()?.end()
+  } catch {}
+
+  process.exit(0)
+}
+
+// --- Main ---
+
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => shutdown())
+}
+
+setStatus({ phase: 'starting-server' })
+serverProc = startPaperServer(SERVER_DIR, SERVER_JAR)
+
+const rcon = await waitForRcon()
+setRconClient(rcon)
+
+const viewerBot = await startViewerBot(rcon)
+
+// temp because there isn't a world yet
+await rcon.send('fill -10 59 -10 10 59 10 oak_planks')
+await rcon.send('gamerule advance_time false')
+await rcon.send('gamerule advance_weather false')
+
+setStatus({ viewerReady: true })
+
+addBot('src/bot', 'SpireBot', true)
+
+startPlayerCountPolling(rcon)
+
+setStatus({ phase: 'ready' })
+log('[runner] Everything is running.')

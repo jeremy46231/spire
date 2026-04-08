@@ -12,13 +12,16 @@ import {
 } from 'fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = resolve(__dirname, '..')
-const DAEMON = resolve(__dirname, 'daemon.js')
+const ROOT = resolve(__dirname, '../..')
+const DAEMON = resolve(__dirname, '../daemon/daemon.js')
 const PID_FILE = resolve(ROOT, '.spire/daemon.pid')
 const LOG_FILE = resolve(ROOT, '.spire/daemon.log')
 const WEB_PORT = 3000
 const API = `http://127.0.0.1:${WEB_PORT}/api`
-const attachLogs = !process.argv.slice(2).includes('--detach')
+const attachLogs = !(
+  process.argv.slice(2).includes('--detach') ||
+  process.argv.slice(2).includes('-d')
+)
 
 async function isDaemonRunning() {
   try {
