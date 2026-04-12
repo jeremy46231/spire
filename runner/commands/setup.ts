@@ -1,16 +1,13 @@
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
-import { decompress } from 'fzstd'
-import * as tar from 'tar'
-import { Readable } from 'stream'
-import { pipeline } from 'stream/promises'
+import { existsSync, mkdirSync, writeFileSync } from 'fs'
+import AdmZip from 'adm-zip'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SERVER_DIR = resolve(__dirname, '../../.spire/server')
-const ARCHIVE = resolve(__dirname, '../../.spire/server.tar.zst')
+const ARCHIVE = resolve(__dirname, '../../.spire/server.zip')
 
-const DOWNLOAD_URL = 'https://files.jer.app/share/2026-04-spire/server.tar.zst'
+const DOWNLOAD_URL = 'https://files.jer.app/share/2026-04-spire/server.zip'
 
 if (existsSync(SERVER_DIR)) {
   console.log('[setup] .spire/server/ already exists, skipping')
@@ -21,7 +18,7 @@ mkdirSync(resolve(__dirname, '../../.spire'), { recursive: true })
 
 // use local archive if it exists, otherwise download
 if (existsSync(ARCHIVE)) {
-  console.log('[setup] Using local .spire/server.tar.zst')
+  console.log('[setup] Using local .spire/server.zip')
 } else {
   console.log(`[setup] Downloading ${DOWNLOAD_URL}`)
   const res = await fetch(DOWNLOAD_URL)
@@ -31,13 +28,10 @@ if (existsSync(ARCHIVE)) {
   console.log('[setup] Download complete')
 }
 
-console.log('[setup] Decompressing...')
-const compressed = readFileSync(ARCHIVE)
-const tarData = Buffer.from(decompress(compressed))
-
+console.log('[setup] Extracting to .spire/server/')
 mkdirSync(SERVER_DIR, { recursive: true })
 
-console.log('[setup] Extracting to .spire/server/')
-await pipeline(Readable.from(tarData), tar.x({ cwd: SERVER_DIR }))
+const zip = new AdmZip(ARCHIVE)
+zip.extractAllTo(SERVER_DIR, true)
 
 console.log('[setup] Done')
