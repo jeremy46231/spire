@@ -11,7 +11,7 @@
   "customizations": {
     "codespaces": {
       "disableAutomaticConfiguration": true,
-      "openFiles": ["README.md"]
+      "openFiles": ["src/bot.js", "README.md"]
     },
     "vscode": {
       "extensions": ["oven.bun-vscode"]
