@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'url'
+import { _initSpire } from './spire.ts'
 
 interface InitConfig {
   serverHost: string
@@ -79,12 +80,12 @@ console.log(`Bot "${username}" spawned`)
 send({ type: 'spawned' })
 await waitForMessage('start')
 
+// Initialize $spire runtime (sets bot + default movements)
+_initSpire(bot)
+
 // Now import the user's bot code
 try {
-  const mod = await import(pathToFileURL(botScript).href)
-  if (typeof mod.onInit === 'function') {
-    await mod.onInit(bot)
-  }
+  await import(pathToFileURL(botScript).href)
 } catch (err) {
   console.error(`Error loading bot script: ${(err as Error).message}`)
   console.error((err as Error).stack)
