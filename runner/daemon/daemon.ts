@@ -1,6 +1,7 @@
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { unlinkSync, writeFileSync } from 'fs'
+import type { ChildProcess } from 'child_process'
 
 import { setStatus, setHandlers } from '../../web/server.js'
 import { log } from './log.js'
@@ -34,16 +35,24 @@ writeFileSync(PID_FILE, String(process.pid))
 process.on('exit', () => {
   try {
     unlinkSync(PID_FILE)
-  } catch {}
+  } catch {
+    // Unlink failed
+  }
 })
 
 // --- Web server handlers ---
 
 setHandlers({
-  restartBots: () => restartBots(),
-  stop: () => shutdown(),
+  restartBots: async () => {
+    await restartBots()
+  },
+  stop: async () => {
+    await shutdown()
+  },
   rcon: (cmd) => sendRcon(cmd),
-  addBot: (filePath, username) => addBot(filePath, username),
+  addBot: async (filePath, username) => {
+    addBot(filePath, username)
+  },
   removeBot: (id) => removeBot(id),
   toggleBot: (id, enabled) => toggleBot(id, enabled),
   restartBot: (id) => restartBot(id),
@@ -53,7 +62,8 @@ setHandlers({
 
 // --- Shutdown ---
 
-let serverProc
+// eslint-disable-next-line prefer-const
+let serverProc: ChildProcess | undefined
 let shuttingDown = false
 
 async function shutdown() {
@@ -64,19 +74,25 @@ async function shutdown() {
   await killAllBots()
   if (serverProc && serverProc.exitCode === null) {
     try {
-      await getRconClient().send('stop')
-    } catch {}
+      await getRconClient()!.send('stop')
+    } catch {
+      // RCON send failed
+    }
 
     const cleanExit = await waitForProcessExit(serverProc, 10000)
     if (!cleanExit) {
       try {
         serverProc.kill('SIGTERM')
-      } catch {}
+      } catch {
+        // Kill failed
+      }
       const termExit = await waitForProcessExit(serverProc, 3000)
       if (!termExit) {
         try {
           serverProc.kill('SIGKILL')
-        } catch {}
+        } catch {
+          // Kill failed
+        }
         await waitForProcessExit(serverProc, 1000)
       }
     }
@@ -84,15 +100,19 @@ async function shutdown() {
 
   try {
     await getRconClient()?.end()
-  } catch {}
+  } catch {
+    // End failed
+  }
 
   process.exit(0)
 }
 
 // --- Main ---
 
-for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => shutdown())
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    shutdown()
+  })
 }
 
 setStatus({ phase: 'starting-server' })
@@ -101,7 +121,7 @@ serverProc = startPaperServer(SERVER_DIR, SERVER_JAR)
 const rcon = await waitForRcon()
 setRconClient(rcon)
 
-const viewerBot = await startViewerBot(rcon)
+await startViewerBot(rcon)
 
 // temp because there isn't a world yet
 await rcon.send('fill -20 59 -20 20 59 20 grass_block')

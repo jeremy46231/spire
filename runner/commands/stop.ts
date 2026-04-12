@@ -10,11 +10,11 @@ const API = `http://127.0.0.1:${WEB_PORT}/api`
 const POLL_INTERVAL_MS = 500
 const GRACEFUL_WAIT_MS = 20_000
 
-function sleep(ms) {
+function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function isPidRunning(pid) {
+function isPidRunning(pid: number) {
   try {
     process.kill(pid, 0)
     return true
@@ -23,13 +23,13 @@ function isPidRunning(pid) {
   }
 }
 
-function getDaemonPid() {
+function getDaemonPid(): number | null {
   if (!existsSync(PID_FILE)) return null
   const pid = Number.parseInt(readFileSync(PID_FILE, 'utf8'), 10)
   return Number.isFinite(pid) ? pid : null
 }
 
-async function waitForPidToExit(pid, timeoutMs) {
+async function waitForPidToExit(pid: number, timeoutMs: number) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (!isPidRunning(pid)) return true
@@ -55,7 +55,9 @@ const daemonPid = getDaemonPid()
 if (!daemonPid || !isPidRunning(daemonPid)) {
   try {
     unlinkSync(PID_FILE)
-  } catch {}
+  } catch {
+    // Unlink failed
+  }
   console.log('[stop] No daemon running')
   process.exit(0)
 }
@@ -68,7 +70,9 @@ if (apiStopRequested) {
   if (stopped) {
     try {
       unlinkSync(PID_FILE)
-    } catch {}
+    } catch {
+      // Unlink failed
+    }
     console.log('[stop] Daemon stopped')
     process.exit(0)
   }

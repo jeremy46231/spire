@@ -3,21 +3,28 @@ import { resolve } from 'path'
 import { broadcast } from '../../web/server.js'
 import { log } from './log.js'
 import { sendRcon } from './rcon.js'
+import type { ChildProcess } from 'child_process'
+import type {
+  BotInstance,
+  BotInfo,
+  BotCatalog,
+  DaemonMessage,
+} from '../types.js'
 
 const SERVER_HOST = '127.0.0.1'
 const SERVER_PORT = 25565
 
-let ROOT
-let BOT_WRAPPER
+let ROOT: string
+let BOT_WRAPPER: string
 
-export function initBots(root, botWrapper) {
+export function initBots(root: string, botWrapper: string) {
   ROOT = root
   BOT_WRAPPER = botWrapper
 }
 
 // --- Bot catalog ---
 
-const BOT_CATALOG = {
+const BOT_CATALOG: BotCatalog = {
   user: [{ filePath: 'src/bot', username: 'SpireBot' }],
   basic: [
     { filePath: 'runner/bots/basic/looker', username: 'LookerBot' },
@@ -33,9 +40,9 @@ export function getBotCatalog() {
 // --- Bot instance management ---
 
 let nextBotId = 1
-const activeBots = []
+const activeBots: BotInstance[] = []
 
-function resolveUsername(desired) {
+function resolveUsername(desired: string): string {
   const taken = new Set(activeBots.map((b) => b.resolvedUsername))
   if (!taken.has(desired)) return desired
   for (let i = 2; ; i++) {
@@ -46,19 +53,17 @@ function resolveUsername(desired) {
 
 function broadcastBots() {
   broadcast('bots', {
-    bots: activeBots.map((b) => ({
-      id: b.id,
-      username: b.resolvedUsername,
-      filePath: b.filePath,
-      enabled: b.enabled,
-      running: b.proc !== null && b.proc.exitCode === null,
-      isDefault: b.isDefault,
-    })),
+    bots: activeBots.map(
+      (b): BotInfo => ({
+        id: b.id,
+        username: b.resolvedUsername,
+        filePath: b.filePath,
+        enabled: b.enabled,
+        running: b.proc !== null && b.proc.exitCode === null,
+        isDefault: b.isDefault,
+      })
+    ),
   })
-}
-
-function randFloat(min, max) {
-  return Math.random() * (max - min) + min
 }
 
 const MIN_SPAWN_RADIUS = 10
@@ -67,14 +72,17 @@ const SPAWN_Y = 60
 
 function randSpawn() {
   const angle = Math.random() * 2 * Math.PI
-  const radius = Math.sqrt(Math.random() * (MAX_SPAWN_RADIUS ** 2 - MIN_SPAWN_RADIUS ** 2) + MIN_SPAWN_RADIUS ** 2)
+  const radius = Math.sqrt(
+    Math.random() * (MAX_SPAWN_RADIUS ** 2 - MIN_SPAWN_RADIUS ** 2) +
+      MIN_SPAWN_RADIUS ** 2
+  )
   const x = Math.round(Math.cos(angle) * radius)
   const z = Math.round(Math.sin(angle) * radius)
   const yaw = Math.random() * 360 - 180
   return `${x} ${SPAWN_Y} ${z} ${yaw} 0`
 }
 
-async function resetPlayer(username) {
+async function resetPlayer(username: string) {
   log(`[runner] Resetting player data for "${username}"`)
   const commands = [
     `clear ${username}`,
@@ -90,21 +98,21 @@ async function resetPlayer(username) {
   }
 }
 
-function sendToProc(proc, msg) {
-  proc.stdin.write(JSON.stringify(msg) + '\n')
+function sendToProc(proc: ChildProcess, msg: DaemonMessage) {
+  proc.stdin?.write(JSON.stringify(msg) + '\n')
 }
 
-function spawnBotProcess(bot) {
+function spawnBotProcess(bot: BotInstance) {
   const username = bot.resolvedUsername
   log(`[runner] Spawning bot "${username}" from ${bot.filePath}`)
 
   const proc = spawn('bun', [BOT_WRAPPER], {
     cwd: ROOT,
-    stdio: ['pipe', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'] as const,
   })
 
   let stdoutBuf = ''
-  proc.stdout.on('data', (d) => {
+  proc.stdout?.on('data', (d: Buffer) => {
     stdoutBuf += d.toString()
     let nl
     while ((nl = stdoutBuf.indexOf('\n')) !== -1) {
@@ -119,19 +127,21 @@ function spawnBotProcess(bot) {
               sendToProc(proc, { type: 'start' })
             )
           }
-        } catch {}
+        } catch {
+          // Parse failed
+        }
       } else if (line.trimEnd()) {
         log(`[bot:${username}] ${line.trimEnd()}`)
       }
     }
   })
-  proc.stderr.on('data', (d) => {
+  proc.stderr?.on('data', (d: Buffer) => {
     for (const line of d.toString().split('\n')) {
       const trimmed = line.trimEnd()
       if (trimmed) log(`[bot:${username}] ${trimmed}`)
     }
   })
-  proc.on('exit', (code) => {
+  proc.on('exit', (code: number | null) => {
     log(`[runner] Bot "${username}" exited with code ${code}`)
     if (bot.proc === proc) bot.proc = null
     broadcastBots()
@@ -150,8 +160,8 @@ function spawnBotProcess(bot) {
   bot.proc = proc
 }
 
-function killBotProc(bot) {
-  return new Promise((resolve) => {
+function killBotProc(bot: BotInstance) {
+  return new Promise<void>((resolve) => {
     if (!bot.proc || bot.proc.exitCode !== null) {
       bot.proc = null
       return resolve()
@@ -168,10 +178,10 @@ function killBotProc(bot) {
   })
 }
 
-export function addBot(filePath, username, isDefault = false) {
+export function addBot(filePath: string, username: string, isDefault = false) {
   const id = nextBotId++
   const resolvedUsername = resolveUsername(username)
-  const bot = {
+  const bot: BotInstance = {
     id,
     filePath,
     username,
@@ -186,17 +196,17 @@ export function addBot(filePath, username, isDefault = false) {
   return bot
 }
 
-export async function removeBot(id) {
+export async function removeBot(id: number) {
   const idx = activeBots.findIndex((b) => b.id === id)
   if (idx === -1) return
-  const bot = activeBots[idx]
+  const bot = activeBots[idx]!
   if (bot.isDefault) return
   await killBotProc(bot)
   activeBots.splice(idx, 1)
   broadcastBots()
 }
 
-export async function toggleBot(id, enabled) {
+export async function toggleBot(id: number, enabled: boolean) {
   const bot = activeBots.find((b) => b.id === id)
   if (!bot) return
   bot.enabled = enabled
@@ -208,12 +218,14 @@ export async function toggleBot(id, enabled) {
   broadcastBots()
 }
 
-export async function restartBot(id) {
+export async function restartBot(id: number) {
   const bot = activeBots.find((b) => b.id === id)
-  if (!bot || !bot.enabled) return
-  await killBotProc(bot)
-  spawnBotProcess(bot)
-  broadcastBots()
+  if (!bot) return
+  if (bot.enabled) {
+    await killBotProc(bot)
+    spawnBotProcess(bot)
+    broadcastBots()
+  }
 }
 
 export function killAllBots() {
@@ -230,13 +242,15 @@ export async function restartBots() {
   log('[runner] Bots restarted')
 }
 
-export function getBotList() {
-  return activeBots.map((b) => ({
-    id: b.id,
-    username: b.resolvedUsername,
-    filePath: b.filePath,
-    enabled: b.enabled,
-    running: b.proc !== null && b.proc.exitCode === null,
-    isDefault: b.isDefault,
-  }))
+export function getBotList(): BotInfo[] {
+  return activeBots.map(
+    (b): BotInfo => ({
+      id: b.id,
+      username: b.resolvedUsername,
+      filePath: b.filePath,
+      enabled: b.enabled,
+      running: b.proc !== null && b.proc.exitCode === null,
+      isDefault: b.isDefault,
+    })
+  )
 }

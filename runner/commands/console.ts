@@ -12,7 +12,7 @@ const rl = createInterface({
 })
 rl.prompt()
 
-rl.on('line', async (line) => {
+rl.on('line', async (line: string) => {
   const cmd = line.trim()
   if (!cmd) {
     rl.prompt()
@@ -22,7 +22,7 @@ rl.on('line', async (line) => {
     const res = await rcon.send(cmd)
     if (res) console.log(res)
   } catch (err) {
-    console.error('Error:', err.message)
+    console.error('Error:', (err as Error).message)
   }
   rl.prompt()
 })

@@ -5,7 +5,9 @@ const SERVER_HOST = '127.0.0.1'
 const SERVER_PORT = 25565
 const VIEWER_PORT = 3001
 
-export async function startViewerBot(rcon) {
+export async function startViewerBot(rcon: {
+  send: (cmd: string) => Promise<string>
+}) {
   const mineflayer = (await import('mineflayer')).default
   const { mineflayer: viewer } = await import('prismarine-viewer')
   log('[runner] Creating spectator viewer bot...')
@@ -18,10 +20,12 @@ export async function startViewerBot(rcon) {
   })
   bot.setMaxListeners(50)
 
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     bot.once('spawn', resolve)
     bot.once('error', reject)
-    bot.once('kick', (reason) => reject(new Error(`Kicked: ${reason}`)))
+    bot.once('end', () => {
+      reject(new Error('Disconnected'))
+    })
   })
 
   bot.physicsEnabled = false
@@ -36,7 +40,9 @@ export async function startViewerBot(rcon) {
   return bot
 }
 
-export function startPlayerCountPolling(rcon) {
+export function startPlayerCountPolling(rcon: {
+  send: (cmd: string) => Promise<string>
+}) {
   setInterval(async () => {
     try {
       const response = await rcon.send('list')
@@ -44,14 +50,16 @@ export function startPlayerCountPolling(rcon) {
         /There are (\d+) of a max of (\d+) players online:(.*)/
       )
       if (match) {
-        const names = match[3]
+        const names = match[3]!
           .trim()
           .split(',')
-          .map((n) => n.trim())
+          .map((n: string) => n.trim())
           .filter(Boolean)
-        const count = names.filter((n) => n !== 'SpireViewer').length
+        const count = names.filter((n: string) => n !== 'SpireViewer').length
         setStatus({ players: count })
       }
-    } catch {}
+    } catch {
+      // Polling failed
+    }
   }, 5000)
 }

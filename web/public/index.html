@@ -478,7 +478,8 @@
 
       // Add bot select
       function populateAddSelect(cat) {
-        addSelect.innerHTML = '<option value="" selected disabled>+ Add bot</option>'
+        addSelect.innerHTML =
+          '<option value="" selected disabled>+ Add bot</option>'
         var categories = Object.keys(cat)
         categories.forEach(function (name) {
           var group = document.createElement('optgroup')
@@ -500,13 +501,18 @@
         fetch('/api/bots/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath: entry.filePath, username: entry.username }),
+          body: JSON.stringify({
+            filePath: entry.filePath,
+            username: entry.username,
+          }),
         })
       })
 
       // Fetch catalog once
       fetch('/api/bots/catalog')
-        .then(function (r) { return r.json() })
+        .then(function (r) {
+          return r.json()
+        })
         .then(function (data) {
           catalog = data
           populateAddSelect(data)

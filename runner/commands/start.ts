@@ -13,7 +13,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '../..')
-const DAEMON = resolve(__dirname, '../daemon/daemon.js')
+const DAEMON = resolve(__dirname, '../daemon/daemon.ts')
 const PID_FILE = resolve(ROOT, '.spire/daemon.pid')
 const LOG_FILE = resolve(ROOT, '.spire/daemon.log')
 const WEB_PORT = 3000
@@ -50,7 +50,9 @@ function tailLog() {
         }
       } while (bytesRead > 0)
       closeSync(fd)
-    } catch {}
+    } catch {
+      // Read failed
+    }
   }
 
   // Wait for the log file to appear
@@ -68,7 +70,7 @@ function tailLog() {
 if (await isDaemonRunning()) {
   console.log('[start] Daemon already running, restarting bots...')
   const res = await fetch(`${API}/restart-bots`, { method: 'POST' })
-  const data = await res.json()
+  const data = (await res.json()) as Record<string, unknown>
   if (data.ok) {
     console.log('[start] Bots restarted')
   } else {

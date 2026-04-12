@@ -1,9 +1,21 @@
 import { pathToFileURL } from 'url'
 
+interface InitConfig {
+  serverHost: string
+  serverPort: number
+  username: string
+  botScript: string
+}
+
+interface InitMessage {
+  type: string
+  config: InitConfig
+}
+
 // Parse newline-delimited JSON from stdin
-const lineHandlers = []
+const lineHandlers: ((line: string) => void)[] = []
 let stdinBuf = ''
-process.stdin.on('data', (chunk) => {
+process.stdin.on('data', (chunk: Buffer) => {
   stdinBuf += chunk.toString()
   let nl
   while ((nl = stdinBuf.indexOf('\n')) !== -1) {
@@ -13,28 +25,30 @@ process.stdin.on('data', (chunk) => {
   }
 })
 
-function waitForMessage(type) {
-  return new Promise((resolve) => {
-    const handler = (line) => {
+function waitForMessage<T>(type: string) {
+  return new Promise<T>((resolve) => {
+    const handler = (line: string) => {
       try {
-        const msg = JSON.parse(line)
-        if (msg.type === type) {
+        const msg = JSON.parse(line) as T
+        if ((msg as Record<string, unknown>).type === type) {
           lineHandlers.splice(lineHandlers.indexOf(handler), 1)
           resolve(msg)
         }
-      } catch {}
+      } catch {
+        // Parse failed
+      }
     }
     lineHandlers.push(handler)
   })
 }
 
-function send(msg) {
+function send(msg: Record<string, unknown>) {
   process.stdout.write('\x00' + JSON.stringify(msg) + '\n')
 }
 
 // Wait for init message from runner
-const { config } = await waitForMessage('init')
-const { serverHost, serverPort, username, botScript } = config
+const initMsg = await waitForMessage<InitMessage>('init')
+const { serverHost, serverPort, username, botScript } = initMsg.config
 
 // Import mineflayer and create bot
 const mineflayer = await import('mineflayer')
@@ -51,10 +65,12 @@ const bot = mineflayer.default.createBot({
 bot.loadPlugin(pathfinder)
 
 // Wait for spawn
-await new Promise((resolve, reject) => {
+await new Promise<void>((resolve, reject) => {
   bot.once('spawn', resolve)
   bot.once('error', reject)
-  bot.once('kick', (reason) => reject(new Error(`Kicked: ${reason}`)))
+  bot.once('end', () => {
+    reject(new Error('Disconnected'))
+  })
 })
 
 console.log(`Bot "${username}" spawned`)
@@ -70,16 +86,17 @@ try {
     await mod.onInit(bot)
   }
 } catch (err) {
-  console.error(`Error loading bot script: ${err.message}`)
-  console.error(err.stack)
+  console.error(`Error loading bot script: ${(err as Error).message}`)
+  console.error((err as Error).stack)
 }
 
 // Listen for game events from runner
-lineHandlers.push((line) => {
+lineHandlers.push(() => {
   try {
-    const event = JSON.parse(line)
     // Future: dispatch events to competitor bot handlers
-  } catch {}
+  } catch {
+    // Event parse failed
+  }
 })
 
 // Keep the process alive

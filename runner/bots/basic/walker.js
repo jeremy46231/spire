@@ -14,5 +14,5 @@ export function onInit(bot) {
   setInterval(() => {
     if (!bot.entity) return
     if (!bot.pathfinder.goal) walkToRandom()
-  }, 500)  
+  }, 500)
 }
