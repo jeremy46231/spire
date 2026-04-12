@@ -129,7 +129,7 @@ await rcon.send('setblock 0 59 0 diamond_block')
 await rcon.send('gamerule advance_time false')
 await rcon.send('gamerule advance_weather false')
 
-setStatus({ viewerReady: true })
+setTimeout(() => setStatus({ viewerReady: true }), 2000)
 
 addBot('src/bot', 'SpireBot', true)
 
