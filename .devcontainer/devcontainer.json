@@ -12,11 +12,11 @@
       "label": "(internal) Prismarine Viewer",
       "onAutoForward": "ignore"
     },
-    "25565":{
+    "25565": {
       "label": "Minecraft Server",
       "onAutoForward": "openBrowser"
     },
-    "25575":{
+    "25575": {
       "label": "Minecraft RCON",
       "onAutoForward": "silent"
     }
