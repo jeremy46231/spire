@@ -1,11 +1,24 @@
 {
   "image": "mcr.microsoft.com/devcontainers/universal",
   "onCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "bun start --detach",
+  "postAttachCommand": "bun start --detach",
+  "forwardPorts": [3000, 25565],
   "portsAttributes": {
     "3000": {
-      "label": "Spire",
+      "label": "Web Interface",
       "onAutoForward": "openBrowser"
+    },
+    "3001": {
+      "label": "(internal) Prismarine Viewer",
+      "onAutoForward": "ignore"
+    },
+    "25565":{
+      "label": "Minecraft Server",
+      "onAutoForward": "openBrowser"
+    },
+    "25575":{
+      "label": "Minecraft RCON",
+      "onAutoForward": "silent"
     }
   },
   "customizations": {
