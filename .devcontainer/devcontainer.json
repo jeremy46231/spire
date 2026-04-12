@@ -1,6 +1,7 @@
 {
   "image": "mcr.microsoft.com/devcontainers/universal",
   "onCreateCommand": "bash .devcontainer/setup.sh",
+  "postCreateCommand": "git pull",
   "postAttachCommand": "bun start --detach",
   "forwardPorts": [3000, 25565],
   "portsAttributes": {
