@@ -6,6 +6,9 @@
 
 Get started with GitHub Codespaces by clicking the link above.
 
+> [!NOTE]
+> The prebuilt codespace is only stored in the US West region, and it might be very slow if you create a codespace in another region. When this event is run for real, it will be available in all regions and be more optimized. If speed is an issue, consider setting it up locally (see below).
+
 ### Local Setup
 
 - [Fork this repo](https://github.com/jeremy46231/spire/fork), and clone it locally
