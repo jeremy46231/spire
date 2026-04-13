@@ -2,6 +2,8 @@
 
 # Spire
 
+[One pager](https://docs.google.com/document/d/1F4BV3_gGf9UEHJzolS4Qx35cR7iM5k3kmab9vo4mw54), this was created for the 2nd round of applying for [Hack Club](https://hackclub.com)'s [gap year fellowship](https://manifesto.hackclub.com).
+
 ### [Get Started](https://github.com/codespaces/new?repo=1203478974&machine=standardLinux32gb&geo=UsWest&hide_repo_select=true&skip_quickstart=true)
 
 Get started with GitHub Codespaces by clicking the link above.
