@@ -2,7 +2,6 @@ import { spawn } from 'child_process'
 import { resolve } from 'path'
 import { broadcast } from '../../web/server.js'
 import { log } from './log.js'
-import { sendRcon } from './rcon.js'
 import type { ChildProcess } from 'child_process'
 import type {
   BotInstance,
@@ -27,9 +26,10 @@ export function initBots(root: string, botWrapper: string) {
 const BOT_CATALOG: BotCatalog = {
   user: [{ filePath: 'src/bot', username: 'SpireBot' }],
   basic: [
-    { filePath: 'runner/bots/basic/looker', username: 'LookerBot' },
-    { filePath: 'runner/bots/basic/walker', username: 'WalkerBot' },
-    { filePath: 'runner/bots/basic/camper', username: 'CamperBot' },
+    { filePath: 'runner/bots/basic/looker', username: 'Looker' },
+    { filePath: 'runner/bots/basic/walker', username: 'Walker' },
+    { filePath: 'runner/bots/basic/camper', username: 'Camper' },
+    { filePath: 'runner/bots/basic/attacker', username: 'Attacker' },
   ],
 }
 
@@ -42,13 +42,15 @@ export function getBotCatalog() {
 let nextBotId = 1
 const activeBots: BotInstance[] = []
 
-function resolveUsername(desired: string): string {
-  const taken = new Set(activeBots.map((b) => b.resolvedUsername))
-  if (!taken.has(desired)) return desired
-  for (let i = 2; ; i++) {
-    const candidate = desired + i
-    if (!taken.has(candidate)) return candidate
+const RANDOM_ID_CHARS =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+
+function randomId() {
+  let id = ''
+  for (let i = 0; i < 6; i++) {
+    id += RANDOM_ID_CHARS[Math.floor(Math.random() * RANDOM_ID_CHARS.length)]
   }
+  return id
 }
 
 function broadcastBots() {
@@ -66,50 +68,30 @@ function broadcastBots() {
   })
 }
 
-const MIN_SPAWN_RADIUS = 10
-const MAX_SPAWN_RADIUS = 20
-const SPAWN_Y = 60
-
-function randSpawn() {
-  const angle = Math.random() * 2 * Math.PI
-  const radius = Math.sqrt(
-    Math.random() * (MAX_SPAWN_RADIUS ** 2 - MIN_SPAWN_RADIUS ** 2) +
-      MIN_SPAWN_RADIUS ** 2
-  )
-  const x = Math.round(Math.cos(angle) * radius)
-  const z = Math.round(Math.sin(angle) * radius)
-  const yaw = Math.random() * 360 - 180
-  return `${x} ${SPAWN_Y} ${z} ${yaw} 0`
-}
-
-async function resetPlayer(username: string) {
-  log(`[runner] Resetting player data for "${username}"`)
-  const commands = [
-    `clear ${username}`,
-    `xp set ${username} 0 levels`,
-    `xp set ${username} 0 points`,
-    `effect clear ${username}`,
-    `gamemode survival ${username}`,
-    `advancement revoke ${username} everything`,
-    `tp ${username} ${randSpawn()}`,
-  ]
-  for (const cmd of commands) {
-    await sendRcon(cmd)
-  }
-}
-
 function sendToProc(proc: ChildProcess, msg: DaemonMessage) {
   proc.stdin?.write(JSON.stringify(msg) + '\n')
 }
 
+function clearRespawnTimer(bot: BotInstance) {
+  if (bot.respawnTimer) {
+    clearTimeout(bot.respawnTimer)
+    bot.respawnTimer = null
+  }
+}
+
 function spawnBotProcess(bot: BotInstance) {
-  const username = bot.resolvedUsername
+  const username = `${bot.username}_${randomId()}`
+  bot.resolvedUsername = username
   log(`[runner] Spawning bot "${username}" from ${bot.filePath}`)
 
   const proc = spawn('bun', [BOT_WRAPPER], {
     cwd: ROOT,
     stdio: ['pipe', 'pipe', 'pipe'] as const,
   })
+
+  // Set proc immediately so exit/kill guards work before any async callbacks
+  bot.proc = proc
+  clearRespawnTimer(bot)
 
   let stdoutBuf = ''
   proc.stdout?.on('data', (d: Buffer) => {
@@ -123,9 +105,9 @@ function spawnBotProcess(bot: BotInstance) {
         try {
           const msg = JSON.parse(line.slice(1))
           if (msg.type === 'spawned') {
-            resetPlayer(username).then(() =>
+            if (bot.proc === proc && proc.exitCode === null && bot.enabled) {
               sendToProc(proc, { type: 'start' })
-            )
+            }
           }
         } catch {
           // Parse failed
@@ -143,9 +125,27 @@ function spawnBotProcess(bot: BotInstance) {
   })
   proc.on('exit', (code: number | null) => {
     log(`[runner] Bot "${username}" exited with code ${code}`)
+    // Only clear if we're still the current proc (not replaced by a new spawn)
     if (bot.proc === proc) bot.proc = null
     broadcastBots()
+    // Auto-respawn if still enabled, still active, and no timer already pending
+    if (bot.enabled && activeBots.includes(bot) && !bot.respawnTimer) {
+      log(`[runner] Automatically respawning ${username} in 3 seconds...`)
+      bot.respawnTimer = setTimeout(() => {
+        bot.respawnTimer = null
+        if (
+          bot.enabled &&
+          activeBots.includes(bot) &&
+          (!bot.proc || bot.proc.exitCode !== null)
+        ) {
+          spawnBotProcess(bot)
+          broadcastBots()
+        }
+      }, 3000)
+    }
   })
+  proc.on('error', () => {})
+  proc.stdin?.on('error', () => {})
 
   sendToProc(proc, {
     type: 'init',
@@ -156,39 +156,35 @@ function spawnBotProcess(bot: BotInstance) {
       botScript: resolve(bot.filePath),
     },
   })
-
-  bot.proc = proc
 }
 
 function killBotProc(bot: BotInstance) {
   return new Promise<void>((resolve) => {
-    if (!bot.proc || bot.proc.exitCode !== null) {
+    const proc = bot.proc
+    if (!proc || proc.exitCode !== null) {
       bot.proc = null
       return resolve()
     }
-    bot.proc.once('exit', () => {
-      bot.proc = null
-      resolve()
-    })
-    bot.proc.kill('SIGTERM')
-    const p = bot.proc
+    // Wait for the exit handler in spawnBotProcess to clean up bot.proc
+    proc.once('exit', () => resolve())
+    proc.kill('SIGTERM')
     setTimeout(() => {
-      if (p.exitCode === null) p.kill('SIGKILL')
+      if (proc.exitCode === null) proc.kill('SIGKILL')
     }, 2000)
   })
 }
 
 export function addBot(filePath: string, username: string, isDefault = false) {
   const id = nextBotId++
-  const resolvedUsername = resolveUsername(username)
   const bot: BotInstance = {
     id,
     filePath,
     username,
-    resolvedUsername,
+    resolvedUsername: username,
     enabled: true,
     proc: null,
     isDefault,
+    respawnTimer: null,
   }
   activeBots.push(bot)
   spawnBotProcess(bot)
@@ -201,6 +197,7 @@ export async function removeBot(id: number) {
   if (idx === -1) return
   const bot = activeBots[idx]!
   if (bot.isDefault) return
+  clearRespawnTimer(bot)
   await killBotProc(bot)
   activeBots.splice(idx, 1)
   broadcastBots()
@@ -212,8 +209,11 @@ export async function toggleBot(id: number, enabled: boolean) {
   bot.enabled = enabled
   if (enabled && (!bot.proc || bot.proc.exitCode !== null)) {
     spawnBotProcess(bot)
-  } else if (!enabled && bot.proc && bot.proc.exitCode === null) {
-    await killBotProc(bot)
+  } else if (!enabled) {
+    clearRespawnTimer(bot)
+    if (bot.proc && bot.proc.exitCode === null) {
+      await killBotProc(bot)
+    }
   }
   broadcastBots()
 }
@@ -222,13 +222,17 @@ export async function restartBot(id: number) {
   const bot = activeBots.find((b) => b.id === id)
   if (!bot) return
   if (bot.enabled) {
+    clearRespawnTimer(bot)
     await killBotProc(bot)
+    // Re-check after async kill: bot may have been disabled or removed
+    if (!bot.enabled || !activeBots.includes(bot)) return
     spawnBotProcess(bot)
     broadcastBots()
   }
 }
 
 export function killAllBots() {
+  for (const bot of activeBots) clearRespawnTimer(bot)
   return Promise.all(activeBots.map((b) => killBotProc(b)))
 }
 

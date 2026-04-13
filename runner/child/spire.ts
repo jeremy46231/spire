@@ -1,4 +1,4 @@
-// $spire — the runtime module for bot scripts.
+// $spire - the runtime module for bot scripts.
 // The bot reference is set by bot-wrapper.ts before the user script is imported,
 // so it is always available at import time in user code.
 

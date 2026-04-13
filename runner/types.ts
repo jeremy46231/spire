@@ -8,6 +8,7 @@ export interface BotInstance {
   enabled: boolean
   proc: ChildProcess | null
   isDefault: boolean
+  respawnTimer: ReturnType<typeof setTimeout> | null
 }
 
 export interface BotInfo {

@@ -4,6 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Spire</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.11.0/lib/addon-fit.min.js"></script>
     <style>
       * {
         box-sizing: border-box;
@@ -261,11 +267,11 @@
             </tr>
             <tr>
               <td>Players</td>
-              <td id="stat-players">0</td>
+              <td id="stat-players">–</td>
             </tr>
             <tr>
               <td>Viewer</td>
-              <td id="stat-viewer" class="yellow">…</td>
+              <td id="stat-viewer" class="yellow">–</td>
             </tr>
           </table>
         </div>
@@ -297,7 +303,11 @@
             <button class="panel-tab active" data-tab="logs">Logs</button>
             <button class="panel-tab" data-tab="console">Console</button>
           </div>
-          <div class="panel-body active" id="logs"></div>
+          <div
+            class="panel-body active"
+            id="logs"
+            style="padding: 0; overflow: hidden"
+          ></div>
           <div class="panel-body" id="console-output"></div>
           <div class="rcon-input-wrap" id="rcon-wrap">
             <span>&gt;</span>
@@ -318,6 +328,23 @@
       var viewerPlaceholder = document.getElementById('viewer-placeholder')
       var logsEl = document.getElementById('logs')
       var consoleOutput = document.getElementById('console-output')
+
+      // xterm.js for logs
+      var logsTerm = new Terminal({
+        convertEol: true,
+        disableStdin: true,
+        fontSize: 12,
+        fontFamily: 'monospace',
+        theme: { background: '#111', foreground: '#ccc' },
+        scrollback: 5000,
+      })
+      var fitAddon = new FitAddon.FitAddon()
+      logsTerm.loadAddon(fitAddon)
+      logsTerm.open(logsEl)
+      fitAddon.fit()
+      new ResizeObserver(function () {
+        fitAddon.fit()
+      }).observe(logsEl)
       var rconWrap = document.getElementById('rcon-wrap')
       var rconInput = document.getElementById('rcon-input')
       var statPhase = document.getElementById('stat-phase')
@@ -341,6 +368,7 @@
           consoleOutput.classList.toggle('active', activeTab === 'console')
           rconWrap.classList.toggle('active', activeTab === 'console')
           if (activeTab === 'console') rconInput.focus()
+          if (activeTab === 'logs') fitAddon.fit()
         })
       })
 
@@ -401,8 +429,7 @@
 
       // Logs
       function appendLog(line) {
-        logsEl.textContent += line + '\n'
-        logsEl.scrollTop = logsEl.scrollHeight
+        logsTerm.writeln(line)
       }
 
       // Bot list
@@ -536,7 +563,7 @@
           viewerEl.style.display = 'block'
           viewerPlaceholder.style.display = 'none'
         } else {
-          statViewer.textContent = '…'
+          statViewer.textContent = '–'
           statViewer.className = 'yellow'
           viewerEl.style.display = 'none'
           viewerPlaceholder.style.display = 'flex'
@@ -549,7 +576,7 @@
         ws.onmessage = function (e) {
           var msg = JSON.parse(e.data)
           if (msg.type === 'backlog') {
-            logsEl.textContent = ''
+            logsTerm.clear()
             msg.lines.forEach(appendLog)
           } else if (msg.type === 'status') {
             updateStatus(msg)
@@ -561,6 +588,11 @@
           }
         }
         ws.onclose = function () {
+          statPhase.textContent = 'Disconnected'
+          statPhase.className = 'red'
+          statPlayers.textContent = '–'
+          statViewer.textContent = '–'
+          statViewer.className = 'red'
           setTimeout(connect, 2000)
         }
       }

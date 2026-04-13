@@ -16,6 +16,7 @@ interface InitMessage {
 // Parse newline-delimited JSON from stdin
 const lineHandlers: ((line: string) => void)[] = []
 let stdinBuf = ''
+process.stdin.on('error', () => process.exit(1))
 process.stdin.on('data', (chunk: Buffer) => {
   stdinBuf += chunk.toString()
   let nl
@@ -61,17 +62,22 @@ const bot = mineflayer.default.createBot({
   username,
   version: '1.21.11',
   hideErrors: false,
+  respawn: false,
 })
 
 bot.loadPlugin(pathfinder)
+
+// Attach exit handlers immediately so the process can never become a zombie,
+// even if a disconnect/error occurs during reset, import, or init
+bot.on('end', () => process.exit(0))
+bot.on('error', () => process.exit(1))
+bot.on('death', () => void setTimeout(() => process.exit(0), 700)) // allow animation to play
 
 // Wait for spawn
 await new Promise<void>((resolve, reject) => {
   bot.once('spawn', resolve)
   bot.once('error', reject)
-  bot.once('end', () => {
-    reject(new Error('Disconnected'))
-  })
+  bot.once('end', () => reject(new Error('Disconnected')))
 })
 
 console.log(`Bot "${username}" spawned`)
@@ -98,12 +104,4 @@ lineHandlers.push(() => {
   } catch {
     // Event parse failed
   }
-})
-
-// Keep the process alive
-setInterval(() => {}, 1 << 30)
-
-// Handle clean shutdown
-bot.on('end', () => {
-  process.exit(0)
 })

@@ -1,6 +1,6 @@
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { unlinkSync, writeFileSync } from 'fs'
+import { readdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs'
 import type { ChildProcess } from 'child_process'
 
 import { setStatus, setHandlers } from '../../web/server.js'
@@ -115,6 +115,30 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   })
 }
 
+// Clear playerdata for non-opped players before starting the server
+{
+  const playerdataDir = resolve(SERVER_DIR, 'world/playerdata')
+  const opsFile = resolve(SERVER_DIR, 'ops.json')
+  const opUuids = new Set<string>()
+  try {
+    const ops = JSON.parse(readFileSync(opsFile, 'utf-8')) as { uuid: string }[]
+    for (const op of ops) opUuids.add(op.uuid)
+  } catch {
+    // No ops file or parse error — clear everything
+  }
+  try {
+    for (const file of readdirSync(playerdataDir)) {
+      const uuid = file.replace(/\.dat(_old)?$/, '')
+      if (!opUuids.has(uuid)) {
+        unlinkSync(resolve(playerdataDir, file))
+      }
+    }
+    log('[runner] Cleared non-op playerdata')
+  } catch {
+    // Directory doesn't exist yet, nothing to clear
+  }
+}
+
 setStatus({ phase: 'starting-server' })
 serverProc = startPaperServer(SERVER_DIR, SERVER_JAR)
 
@@ -128,6 +152,8 @@ await rcon.send('fill -20 59 -20 20 59 20 grass_block')
 await rcon.send('setblock 0 59 0 diamond_block')
 await rcon.send('gamerule advance_time false')
 await rcon.send('gamerule advance_weather false')
+await rcon.send('setworldspawn 0 60 0')
+await rcon.send('gamerule respawn_radius 20')
 
 setTimeout(() => setStatus({ viewerReady: true }), 2000)
 
